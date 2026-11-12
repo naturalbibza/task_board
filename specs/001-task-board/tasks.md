@@ -11,13 +11,13 @@
   фаза, начиная с фазы 3, заканчивается ре-деплоем (🔁) — прод всегда в состоянии
   последней принятой фазы, преподавателю есть что показать в любой момент.
 
-## Фаза 0. Инфраструктура репозитория
+## Фаза 0. Инфраструктура репозитория ✅
 
-- [ ] 0.1 `pnpm-workspace.yaml`, корневой `package.json` (скрипты `dev`, `build`, `lint`, `typecheck`), `tsconfig.base.json` (strict), `.gitignore`, `.env.example`
-- [ ] 0.2 Пакет `shared`: минимальный (`index.ts`, env-схема), как зависимости `server`/`client`
-- [ ] 0.3 Скелеты `server` и `client` (Vite React-TS шаблон), ESLint + Prettier в корне
-- [ ] 0.4 README: как поднять локально, структура репозитория
-- **Чекпоинт:** `pnpm dev` поднимает сервер (страница health) и клиент (заглушка Vite); `pnpm typecheck` и `pnpm lint` проходят; пуш в main.
+- [x] 0.1 `pnpm-workspace.yaml`, корневой `package.json` (скрипты `dev`, `build`, `lint`, `typecheck`), `tsconfig.base.json` (strict), `.gitignore`, `.env.example`
+- [x] 0.2 Пакет `shared`: минимальный (`index.ts`, env-схема), как зависимости `server`/`client`
+- [x] 0.3 Скелеты `server` и `client` (Vite React-TS шаблон), ESLint + Prettier в корне
+- [x] 0.4 README: как поднять локально, структура репозитория
+- **Чекпоинт:** `pnpm dev` поднимает сервер (страница health) и клиент (заглушка Vite); `pnpm typecheck` и `pnpm lint` проходят; пуш в main. — **пройден 2026-11-12** (health-эндпоинт проверен запросом; отклонение от плана: pnpm 10 установлен через `npm i -g`, т.к. corepack из Node 20.15 (JetBrains-сборка) падает на проверке подписи).
 
 ## Фаза 1. Аккаунты (US-1–3)
 
