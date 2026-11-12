@@ -19,13 +19,13 @@
 - [x] 0.4 README: как поднять локально, структура репозитория
 - **Чекпоинт:** `pnpm dev` поднимает сервер (страница health) и клиент (заглушка Vite); `pnpm typecheck` и `pnpm lint` проходят; пуш в main. — **пройден 2026-11-12** (health-эндпоинт проверен запросом; отклонение от плана: pnpm 10 установлен через `npm i -g`, т.к. corepack из Node 20.15 (JetBrains-сборка) падает на проверке подписи).
 
-## Фаза 1. Аккаунты (US-1–3)
+## Фаза 1. Аккаунты (US-1–3) ✅
 
-- [ ] 1.1 Drizzle: таблица `users` в `src/db/schema.ts`, генерация и применение миграции (`drizzle-kit generate` / `migrate`), подключение драйвера (`drizzle-orm/node-postgres`)
-- [ ] 1.2 `/api/auth/register|login|logout|me`: bcrypt, JWT в httpOnly-cookie, zod-валидация
-- [ ] 1.3 Клиент: страницы Login/Register, `AuthContext`, редиректы неавторизованных
-- [ ] 1.4 Клиент: страница `Boards` со списком (пока пустым) и кнопкой «Создать»
-- **Чекпоинт:** регистрация → вход →/logout работает в браузере; cookie видна в DevTools; неверный email/пароль дают ошибки формы.
+- [x] 1.1 Drizzle: таблица `users` в `src/db/schema.ts`, генерация и применение миграции (`drizzle-kit generate` / `migrate`), подключение драйвера (`drizzle-orm/node-postgres`)
+- [x] 1.2 `/api/auth/register|login|logout|me`: bcrypt, JWT в httpOnly-cookie, zod-валидация
+- [x] 1.3 Клиент: страницы Login/Register, `AuthContext`, редиректы неавторизованных
+- [x] 1.4 Клиент: страница `Boards` со списком (пока пустым) и кнопкой «Создать»
+- **Чекпоинт:** регистрация → вход →/logout работает в браузере; cookie видна в DevTools; неверный email/пароль дают ошибки формы. — **пройден 2026-11-12** (проверено в браузере и запросами; HTTP-тесты: register/me/login/logout, BAD_CREDENTIALS, EMAIL_TAKEN, VALIDATION; найдено и исправлено: Drizzle заворачивает pg-ошибки — проверка unique-violation идёт по цепочке cause; известный шум: анонимный запрос `/auth/me` логирует 401 в консоли браузера — убрать в фазе 8).
 
 ## Фаза 2. Первый деплой на VPS (NFR-6, частично A6) ← перенесена вперёд
 

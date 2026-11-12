@@ -33,6 +33,9 @@ coverage/
 .eslintcache
 .vite/
 
+# --- Локальные заметки (тестовые аккаунты, порты) ---
+DEV_NOTES.md
+
 # --- IDE и ОС ---
 .idea/
 .vscode/

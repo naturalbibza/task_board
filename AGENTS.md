@@ -42,5 +42,8 @@ pnpm build              # сборка client и server
   `drizzle-kit generate`; сгенерированные SQL-миграции не редактировать вручную.
   Применение миграций: `pnpm --filter @task-board/server db:migrate`.
 - Секреты (`JWT_SECRET`, `DATABASE_URL`) — только в `.env`; `.env` не коммитить.
+- Локальные и продовые служебные данные (тестовые аккаунты, порты, адрес VPS по
+  SSH, домен, содержимое серверного `.env`) — в `DEV_NOTES.md`; файл в .gitignore,
+  в репозиторий и в ответы не публиковать.
 - Сгенерированное (`client/dist`, `node_modules`, миграции-артефакты) не редактировать.
 - Перед завершением задачи: `pnpm typecheck && pnpm lint` без ошибок.
