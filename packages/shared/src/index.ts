@@ -2,3 +2,4 @@
 // Всё, что импортируется из @task-board/shared, не должно дублироваться в других пакетах.
 
 export * from './env';
+export * from './api-types';

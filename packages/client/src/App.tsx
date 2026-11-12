@@ -1,31 +1,16 @@
-import { useEffect, useState } from 'react';
-
-type Health = { status: string; service: string };
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { BoardsPage } from './pages/BoardsPage';
+import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 
 export function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-
-  useEffect(() => {
-    fetch('/api/health')
-      .then((res) => res.json())
-      .then(setHealth)
-      .catch(() => setHealth(null));
-  }, []);
-
   return (
-    <main className="page">
-      <h1>Task Board</h1>
-      <p>Скелет монорепо (фаза 0).</p>
-      <p>
-        Сервер:{' '}
-        {health ? (
-          <code>
-            {health.service} — {health.status}
-          </code>
-        ) : (
-          'недоступен'
-        )}
-      </p>
-    </main>
+    <Routes>
+      <Route path="/" element={<Navigate to="/boards" replace />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/boards" element={<BoardsPage />} />
+      <Route path="*" element={<Navigate to="/boards" replace />} />
+    </Routes>
   );
 }

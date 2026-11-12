@@ -6,15 +6,27 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@task-board/shared": "workspace:*",
-    "express": "^5.1.0"
+    "bcryptjs": "^3.0.2",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.0.0",
+    "drizzle-orm": "^0.44.0",
+    "express": "^5.1.0",
+    "jose": "^6.0.0",
+    "pg": "^8.16.0",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.0",
     "@types/node": "^20.0.0",
+    "@types/pg": "^8.15.0",
+    "drizzle-kit": "^0.31.0",
     "tsx": "^4.20.0"
   }
 }

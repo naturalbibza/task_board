@@ -9,14 +9,106 @@ body {
   color: #172b4d;
 }
 
+button {
+  font: inherit;
+  background: #0c66e4;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.link {
+  background: none;
+  color: #0c66e4;
+  padding: 0;
+  text-decoration: underline;
+}
+
 .page {
   max-width: 720px;
-  margin: 4rem auto;
+  margin: 3rem auto;
   padding: 0 1rem;
 }
 
-code {
-  background: #e2e4e9;
-  padding: 0.1rem 0.35rem;
-  border-radius: 4px;
+.page-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.empty {
+  color: #6b778c;
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 15%);
+  padding: 2rem;
+}
+
+.form {
+  width: min(360px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.form input {
+  font: inherit;
+  font-weight: 400;
+  padding: 0.5rem 0.6rem;
+  border: 2px solid #dcdfe4;
+  border-radius: 6px;
+}
+
+.form input:focus {
+  outline: none;
+  border-color: #0c66e4;
+}
+
+.error {
+  margin: 0;
+  color: #ca3521;
+  font-size: 0.9rem;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #6b778c;
+}
+
+.optional {
+  font-weight: 400;
+  color: #6b778c;
 }
