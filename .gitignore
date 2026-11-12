@@ -1,0 +1,41 @@
+# --- Зависимости ---
+node_modules/
+.pnpm-store/
+
+# --- Сборка ---
+dist/
+build/
+*.tsbuildinfo
+
+# --- Окружение и секреты ---
+.env
+.env.*
+!.env.example
+
+# --- Локальные dev-БД ---
+*.db
+*.sqlite
+
+# --- Логи ---
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# --- Docker и деплой ---
+caddy/
+caddy_data/
+pgdata/
+docker-compose.override.yml
+
+# --- Coverage / кэш инструментов ---
+coverage/
+.eslintcache
+.vite/
+
+# --- IDE и ОС ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
