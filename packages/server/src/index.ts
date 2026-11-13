@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import { Server as SocketIOServer } from 'socket.io';
 import { env } from './db';
 import { authRouter } from './http/auth';
-import { boardsRouter, cardsRouter, columnsRouter } from './http/boards';
+import { boardsRouter } from './http/boards';
 import { errorHandler } from './http/errors';
 import { registerSocketHandlers } from './ws';
 import type { ClientToServerEvents, ServerToClientEvents } from '@task-board/shared';
@@ -23,8 +23,6 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/boards', boardsRouter);
-app.use('/api/columns', columnsRouter);
-app.use('/api/cards', cardsRouter);
 
 // Прод: раздаём собранный клиентский бандл и SPA-fallback (в dev этим занимается Vite)
 const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');

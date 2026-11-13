@@ -1,33 +1,18 @@
 ﻿import { Router } from 'express';
-import { and, asc, eq, inArray, max } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { RequestHandler } from 'express';
-import {
-  createBoardSchema,
-  createCardSchema,
-  createColumnSchema,
-  renameBoardSchema,
-  updateCardSchema,
-  type BoardDto,
-  type BoardSnapshot,
-  type CardDto,
-  type ColumnDto,
-  type UserDto,
-} from '@task-board/shared';
+import { createBoardSchema, renameBoardSchema, type BoardDto, type BoardSnapshot, type CardDto, type ColumnDto, type UserDto } from '@task-board/shared';
 import { db } from '../db';
 import { boardMembers, boards, cards, columns, users } from '../db/schema';
 import { HttpError } from './errors';
 import { requireUserId, toUserDto } from './session';
 
 export const boardsRouter = Router();
-export const columnsRouter = Router();
-export const cardsRouter = Router();
-
-const STEP = 1024;
 
 type Access = { boardId: string; title: string; role: 'OWNER' | 'MEMBER' };
 
 /** Доступ к доске: участник или владелец; иначе 404 (не раскрываем существование). */
-async function boardAccess(userId: string, boardId: string): Promise<Access> {
+export async function boardAccess(userId: string, boardId: string): Promise<Access> {
   const [row] = await db
     .select({ boardId: boards.id, title: boards.title, role: boardMembers.role })
     .from(boards)
@@ -40,7 +25,7 @@ async function boardAccess(userId: string, boardId: string): Promise<Access> {
 }
 
 /** Доступ через колонку (для карточек и колонок по их id). */
-async function columnAccess(userId: string, columnId: string): Promise<Access & { columnId: string }> {
+export async function columnAccess(userId: string, columnId: string): Promise<Access & { columnId: string }> {
   const [column] = await db.select().from(columns).where(eq(columns.id, columnId));
   if (!column) {
     throw new HttpError(404, 'COLUMN_NOT_FOUND', 'Колонка не найдена');
@@ -50,7 +35,7 @@ async function columnAccess(userId: string, columnId: string): Promise<Access & 
 }
 
 /** Доступ через карточку. */
-async function cardAccess(userId: string, cardId: string): Promise<Access & { columnId: string }> {
+export async function cardAccess(userId: string, cardId: string): Promise<Access & { columnId: string }> {
   const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
   if (!card) {
     throw new HttpError(404, 'CARD_NOT_FOUND', 'Карточка не найдена');
@@ -59,7 +44,10 @@ async function cardAccess(userId: string, cardId: string): Promise<Access & { co
   return access;
 }
 
-function boardDto(board: { id: string; title: string; createdAt: Date; updatedAt: Date }, role: Access['role']): BoardDto {
+export function boardDto(
+  board: { id: string; title: string; createdAt: Date; updatedAt: Date },
+  role: Access['role'],
+): BoardDto {
   return {
     id: board.id,
     title: board.title,
@@ -69,11 +57,11 @@ function boardDto(board: { id: string; title: string; createdAt: Date; updatedAt
   };
 }
 
-function columnDto(column: { id: string; boardId: string; title: string; position: number }): ColumnDto {
+export function columnDto(column: { id: string; boardId: string; title: string; position: number }): ColumnDto {
   return { id: column.id, boardId: column.boardId, title: column.title, position: column.position };
 }
 
-function cardDto(card: typeof cards.$inferSelect): CardDto {
+export function cardDto(card: typeof cards.$inferSelect): CardDto {
   return {
     id: card.id,
     columnId: card.columnId,
@@ -86,18 +74,7 @@ function cardDto(card: typeof cards.$inferSelect): CardDto {
   };
 }
 
-/** Следующая позиция в конце списка (FR-6: вставка в конец = last + STEP). */
-async function nextColumnPosition(boardId: string): Promise<number> {
-  const [row] = await db.select({ maxPos: max(columns.position) }).from(columns).where(eq(columns.boardId, boardId));
-  return (row?.maxPos ?? 0) + STEP;
-}
-
-async function nextCardPosition(columnId: string): Promise<number> {
-  const [row] = await db.select({ maxPos: max(cards.position) }).from(cards).where(eq(cards.columnId, columnId));
-  return (row?.maxPos ?? 0) + STEP;
-}
-
-/** Полный снапшот доски (FR-9: тот же формат будет у WS board:state). */
+/** Полный снапшот доски (FR-9: тот же формат у WS board:state). */
 export async function snapshot(boardId: string, role: Access['role']): Promise<BoardSnapshot> {
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
   if (!board) {
@@ -132,7 +109,7 @@ export async function snapshot(boardId: string, role: Access['role']): Promise<B
   };
 }
 
-// --- Доски ---
+// --- Доски (FR-8: CRUD досок остаётся на REST) ---
 
 const listBoards: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
@@ -156,7 +133,7 @@ const createBoard: RequestHandler<{ id: string }> = async (req, res) => {
       defaultColumns.map((columnTitle, i) => ({
         boardId: created.id,
         title: columnTitle,
-        position: (i + 1) * STEP,
+        position: (i + 1) * 1024,
       })),
     );
     return created;
@@ -191,82 +168,8 @@ const deleteBoard: RequestHandler<{ id: string }> = async (req, res) => {
   res.json({ ok: true });
 };
 
-// --- Колонки ---
-
-const createColumn: RequestHandler<{ id: string }> = async (req, res) => {
-  const userId = await requireUserId(req);
-  const access = await boardAccess(userId, req.params.id); // POST /boards/:id/columns
-  const { title } = createColumnSchema.parse(req.body);
-  const position = await nextColumnPosition(access.boardId);
-  const [column] = await db.insert(columns).values({ boardId: access.boardId, title, position }).returning();
-  res.status(201).json({ column: columnDto(column) });
-};
-
-const renameColumn: RequestHandler<{ id: string }> = async (req, res) => {
-  const userId = await requireUserId(req);
-  const access = await columnAccess(userId, req.params.id); // PATCH /columns/:id
-  const { title } = createColumnSchema.parse(req.body);
-  const [updated] = await db
-    .update(columns)
-    .set({ title })
-    .where(eq(columns.id, access.columnId))
-    .returning();
-  res.json({ column: columnDto(updated) });
-};
-
-const deleteColumn: RequestHandler<{ id: string }> = async (req, res) => {
-  const userId = await requireUserId(req);
-  const access = await columnAccess(userId, req.params.id); // DELETE /columns/:id
-  await db.delete(columns).where(eq(columns.id, access.columnId));
-  res.json({ ok: true });
-};
-
-// --- Карточки ---
-
-const createCard: RequestHandler<{ id: string }> = async (req, res) => {
-  const userId = await requireUserId(req);
-  const access = await columnAccess(userId, req.params.id); // POST /columns/:id/cards
-  const { title, description } = createCardSchema.parse(req.body);
-  const position = await nextCardPosition(access.columnId);
-  const [card] = await db
-    .insert(cards)
-    .values({ columnId: access.columnId, title, description: description ?? null, position, authorId: userId })
-    .returning();
-  res.status(201).json({ card: cardDto(card) });
-};
-
-const updateCard: RequestHandler<{ id: string }> = async (req, res) => {
-  const userId = await requireUserId(req);
-  await cardAccess(userId, req.params.id); // PATCH /cards/:id
-  const { title, description } = updateCardSchema.parse(req.body);
-  const [updated] = await db
-    .update(cards)
-    .set({
-      ...(title !== undefined ? { title } : {}),
-      ...(description !== undefined ? { description } : {}),
-    })
-    .where(eq(cards.id, req.params.id))
-    .returning();
-  res.json({ card: cardDto(updated) });
-};
-
-const deleteCard: RequestHandler<{ id: string }> = async (req, res) => {
-  const userId = await requireUserId(req);
-  await cardAccess(userId, req.params.id); // DELETE /cards/:id
-  await db.delete(cards).where(eq(cards.id, req.params.id));
-  res.json({ ok: true });
-};
-
 boardsRouter.get('/', listBoards);
 boardsRouter.post('/', createBoard);
 boardsRouter.get('/:id', getBoard);
 boardsRouter.patch('/:id', renameBoard);
 boardsRouter.delete('/:id', deleteBoard);
-boardsRouter.post('/:id/columns', createColumn);
-
-columnsRouter.patch('/:id', renameColumn);
-columnsRouter.delete('/:id', deleteColumn);
-columnsRouter.post('/:id/cards', createCard);
-
-cardsRouter.patch('/:id', updateCard);
-cardsRouter.delete('/:id', deleteCard);

@@ -16,7 +16,7 @@ import {
 } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { BoardSnapshot, CardDto, ColumnDto, PresenceUser } from '@task-board/shared';
+import type { BoardSnapshot, CardDto, ColumnDto, PresenceUser, UserDto } from '@task-board/shared';
 import * as boardsApi from '../api/boards';
 import { getSocket } from '../api/socket';
 import { errorText } from '../state/auth-context';
@@ -36,6 +36,7 @@ export function BoardPage() {
   const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<BoardSnapshot | null>(null);
   const [online, setOnline] = useState<PresenceUser[]>([]);
+  const [editingByCard, setEditingByCard] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -51,15 +52,12 @@ export function BoardPage() {
     column?: ColumnDto;
     originalCard?: CardDto;
   } | null>(null);
-  const lastOverColumnRef = useRef<string | null>(null);
-  // Последнее намерение перемещения из onDragOver — применяется в dragEnd,
-  // если симулятор/пользователь бросил карточку «на саму себя».
   const lastMoveRef = useRef<{ cardId: string; toColumnId: string; beforeId: string | null; afterId: string | null; position: number } | null>(
     null,
   );
 
   const onDragStart = (event: DragStartEvent) => {
-    lastOverColumnRef.current = null;
+    lastMoveRef.current = null;
     const type = event.active.data.current?.type as 'card' | 'column' | undefined;
     if (type === 'card') {
       const card = snapshot?.cards.find((c) => c.id === event.active.id);
@@ -72,13 +70,9 @@ export function BoardPage() {
 
   const clearDrag = () => {
     setActiveDrag(null);
-    lastOverColumnRef.current = null;
     lastMoveRef.current = null;
   };
 
-  /** Тень на месте приземления: при наведении на другую колонку карточка
-   *  оптимистически вставляется в неё — SortableContext сдвигает соседей
-   *  и показывает полупрозрачный слот (как у колонок). */
   const onDragOver = (event: DragOverEvent) => {
     const { active, over } = event;
     if (!over || !snapshot) return;
@@ -103,10 +97,7 @@ export function BoardPage() {
       targetColumnId = String(over.id);
       if (card.columnId !== targetColumnId) index = snapshot.cards.filter((c) => c.columnId === targetColumnId).length;
     }
-    if (!targetColumnId || card.columnId === targetColumnId) {
-      lastOverColumnRef.current = targetColumnId;
-      return;
-    }
+    if (!targetColumnId || card.columnId === targetColumnId) return;
 
     const list = snapshot.cards
       .filter((c) => c.columnId === targetColumnId && c.id !== cardId)
@@ -114,7 +105,6 @@ export function BoardPage() {
     const ins = insertion(list, index ?? list.length);
     optimisticMoveCard(cardId, targetColumnId, ins.position);
     lastMoveRef.current = { cardId, toColumnId: targetColumnId, beforeId: ins.beforeId, afterId: ins.afterId, position: ins.position };
-    lastOverColumnRef.current = targetColumnId;
   };
 
   /** Расчёт соседей и позиции после вставки в упорядоченный список. */
@@ -149,6 +139,7 @@ export function BoardPage() {
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
+    clearDrag();
 
     // Дроп вне колонок: вернуть карточку в исходную (FR-7, как в Trello)
     if (!over) {
@@ -156,33 +147,9 @@ export function BoardPage() {
       if (original) {
         setSnapshot((prev) => prev && ({ ...prev, cards: prev.cards.map((c) => (c.id === original.id ? original : c)) }));
       }
-      clearDrag();
       return;
     }
-    // Дроп «на саму себя» (симулятор отпускает у источника): применяем последнее
-    // намерение из onDragOver — карточка уже переехала в целевую колонку.
-    if (active.data.current?.type === 'card' && String(over.id) === String(active.id)) {
-      const last = lastMoveRef.current;
-      if (last && last.toColumnId !== activeDrag?.originalCard?.columnId) {
-        optimisticMoveCard(last.cardId, last.toColumnId, last.position);
-        getSocket().emit('card:move', {
-          id: last.cardId,
-          toColumnId: last.toColumnId,
-          beforeId: last.beforeId,
-          afterId: last.afterId,
-        });
-      } else if (activeDrag?.originalCard) {
-        setSnapshot((prev) =>
-          prev && ({ ...prev, cards: prev.cards.map((c) => (c.id === activeDrag.originalCard!.id ? activeDrag.originalCard! : c)) }),
-        );
-      }
-      clearDrag();
-      return;
-    }
-    if (!snapshot || String(active.id) === String(over.id)) {
-      clearDrag();
-      return;
-    }
+    if (!snapshot || String(active.id) === String(over.id)) return;
     const activeType = active.data.current?.type as 'card' | 'column' | undefined;
 
     if (activeType === 'card') {
@@ -262,10 +229,9 @@ export function BoardPage() {
         afterId: ins.afterId,
       });
     }
-    clearDrag();
   };
 
-  // WS: снапшот и presence приходят с сервера (FR-9, FR-13, FR-14)
+  // WS: снапшот, presence и события мутаций (FR-9, FR-13, FR-14, фаза 8)
   useEffect(() => {
     if (!id) return;
     const socket = getSocket();
@@ -282,12 +248,48 @@ export function BoardPage() {
       setSnapshot((prev) => prev && { ...prev, cards: mergeById(prev.cards, payload.cards) });
     const onColumnMoved = (payload: { columns: ColumnDto[] }) =>
       setSnapshot((prev) => prev && { ...prev, columns: mergeById(prev.columns, payload.columns) });
+    const onColumnCreated = (payload: { column: ColumnDto }) =>
+      setSnapshot((prev) => prev && { ...prev, columns: [...prev.columns, payload.column] });
+    const onColumnUpdated = (payload: { column: ColumnDto }) =>
+      setSnapshot((prev) => prev && { ...prev, columns: mergeById(prev.columns, [payload.column]) });
+    const onColumnDeleted = (payload: { columnId: string }) =>
+      setSnapshot(
+        (prev) =>
+          prev && {
+            ...prev,
+            columns: prev.columns.filter((c) => c.id !== payload.columnId),
+            cards: prev.cards.filter((c) => c.columnId !== payload.columnId),
+          },
+      );
+    const onCardCreated = (payload: { card: CardDto }) =>
+      setSnapshot((prev) => prev && { ...prev, cards: [...prev.cards, payload.card] });
+    const onCardUpdated = (payload: { card: CardDto }) =>
+      setSnapshot((prev) => prev && { ...prev, cards: mergeById(prev.cards, [payload.card]) });
+    const onCardDeleted = (payload: { cardId: string; columnId: string }) =>
+      setSnapshot((prev) => prev && { ...prev, cards: prev.cards.filter((c) => c.id !== payload.cardId) });
+    const onBoardUpdated = (payload: { board: BoardSnapshot['board'] }) =>
+      setSnapshot((prev) => prev && { ...prev, board: payload.board });
+    const onEditing = (payload: { cardId: string; userId: string | null }) =>
+      setEditingByCard((prev) => {
+        const next = { ...prev };
+        if (payload.userId) next[payload.cardId] = payload.userId;
+        else delete next[payload.cardId];
+        return next;
+      });
 
     socket.on('board:state', onState);
     socket.on('presence:update', onPresence);
     socket.on('ws:error', onWsError);
     socket.on('card:moved', onCardMoved);
     socket.on('column:moved', onColumnMoved);
+    socket.on('column:created', onColumnCreated);
+    socket.on('column:updated', onColumnUpdated);
+    socket.on('column:deleted', onColumnDeleted);
+    socket.on('card:created', onCardCreated);
+    socket.on('card:updated', onCardUpdated);
+    socket.on('card:deleted', onCardDeleted);
+    socket.on('board:updated', onBoardUpdated);
+    socket.on('presence:editing', onEditing);
     socket.emit('board:join', { boardId: id });
 
     return () => {
@@ -297,6 +299,35 @@ export function BoardPage() {
       socket.off('ws:error', onWsError);
       socket.off('card:moved', onCardMoved);
       socket.off('column:moved', onColumnMoved);
+      socket.off('column:created', onColumnCreated);
+      socket.off('column:updated', onColumnUpdated);
+      socket.off('column:deleted', onColumnDeleted);
+      socket.off('card:created', onCardCreated);
+      socket.off('card:updated', onCardUpdated);
+      socket.off('card:deleted', onCardDeleted);
+      socket.off('board:updated', onBoardUpdated);
+      socket.off('presence:editing', onEditing);
+    };
+  }, [id]);
+
+  // WS-мутации (FR-8, фаза 8): optimistic не нужен — событие от сервера
+  // перезаписывает состояние (reconciliation, конституция №3)
+  const ws = useMemo(() => {
+    const socket = getSocket();
+    const boardId = id;
+    return {
+      createColumn: (title: string) => {
+        if (!boardId) return;
+        socket.emit('column:create', { boardId, title });
+      },
+      renameColumn: (columnId: string, title: string) => socket.emit('column:rename', { id: columnId, title }),
+      deleteColumn: (columnId: string) => socket.emit('column:delete', { id: columnId }),
+      createCard: (columnId: string, title: string) => socket.emit('card:create', { columnId, title }),
+      updateCard: (cardId: string, patch: { title?: string; description?: string | null }) =>
+        socket.emit('card:update', { id: cardId, ...patch }),
+      deleteCard: (cardId: string) => socket.emit('card:delete', { id: cardId }),
+      editingStart: (cardId: string) => socket.emit('card:editing-start', { cardId }),
+      editingStop: (cardId: string) => socket.emit('card:editing-stop', { cardId }),
     };
   }, [id]);
 
@@ -367,16 +398,16 @@ export function BoardPage() {
                 cards={snapshot.cards
                   .filter((c) => c.columnId === column.id)
                   .sort((a, b) => a.position - b.position)}
-                boardId={snapshot.board.id}
+                ws={ws}
                 reload={reload}
                 onError={setError}
+                editingByCard={editingByCard}
+                members={snapshot.members}
               />
             ))}
             <NewColumnForm
-              boardId={snapshot.board.id}
-              onCreate={async (title) => {
-                const res = await boardsApi.createColumn(snapshot.board.id, title);
-                setSnapshot({ ...snapshot, columns: [...snapshot.columns, res.column] });
+              onCreate={(title) => {
+                ws.createColumn(title);
               }}
             />
           </div>
@@ -462,12 +493,25 @@ function BoardTitle(props: BoardTitleProps) {
   );
 }
 
+interface WsApi {
+  createColumn: (title: string) => void;
+  renameColumn: (columnId: string, title: string) => void;
+  deleteColumn: (columnId: string) => void;
+  createCard: (columnId: string, title: string) => void;
+  updateCard: (cardId: string, patch: { title?: string; description?: string | null }) => void;
+  deleteCard: (cardId: string) => void;
+  editingStart: (cardId: string) => void;
+  editingStop: (cardId: string) => void;
+}
+
 interface ColumnViewProps {
   column: ColumnDto;
   cards: CardDto[];
-  boardId: string;
+  ws: WsApi;
   reload: () => Promise<void>;
   onError: (message: string) => void;
+  editingByCard: Record<string, string>;
+  members: UserDto[];
 }
 
 function ColumnView(props: ColumnViewProps) {
@@ -480,40 +524,25 @@ function ColumnView(props: ColumnViewProps) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleValue, setTitleValue] = useState(props.column.title);
 
-  const onCreateCard = async (e: FormEvent) => {
+  const onCreateCard = (e: FormEvent) => {
     e.preventDefault();
     const title = newCardTitle.trim();
     if (!title) return;
-    try {
-      await boardsApi.createCard(props.column.id, title);
-      setNewCardTitle('');
-      await props.reload();
-    } catch (err) {
-      props.onError(errorText(err));
-    }
+    props.ws.createCard(props.column.id, title);
+    setNewCardTitle('');
   };
 
   const onRename = async (e: FormEvent) => {
     e.preventDefault();
     const title = titleValue.trim();
     if (!title) return;
-    try {
-      await boardsApi.renameColumn(props.column.id, title);
-      setEditingTitle(false);
-      await props.reload();
-    } catch (err) {
-      props.onError(errorText(err));
-    }
+    props.ws.renameColumn(props.column.id, title);
+    setEditingTitle(false);
   };
 
   const onDeleteColumn = async () => {
     if (!window.confirm(`Удалить колонку «${props.column.title}» вместе с карточками?`)) return;
-    try {
-      await boardsApi.deleteColumn(props.column.id);
-      await props.reload();
-    } catch (err) {
-      props.onError(errorText(err));
-    }
+    props.ws.deleteColumn(props.column.id);
   };
 
   return (
@@ -558,7 +587,15 @@ function ColumnView(props: ColumnViewProps) {
       <SortableContext items={props.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
         <div className="column-cards">
           {props.cards.map((card) => (
-            <CardView key={card.id} card={card} reload={props.reload} onError={props.onError} />
+            <CardView
+              key={card.id}
+              card={card}
+              ws={props.ws}
+              reload={props.reload}
+              onError={props.onError}
+              editingBy={props.editingByCard[card.id] ?? null}
+              members={props.members}
+            />
           ))}
         </div>
       </SortableContext>
@@ -566,7 +603,7 @@ function ColumnView(props: ColumnViewProps) {
       <form
         className="card-create"
         onSubmit={(e) => {
-          void onCreateCard(e);
+          onCreateCard(e);
         }}
       >
         <input
@@ -583,8 +620,11 @@ function ColumnView(props: ColumnViewProps) {
 
 interface CardViewProps {
   card: CardDto;
+  ws: WsApi;
   reload: () => Promise<void>;
   onError: (message: string) => void;
+  editingBy: string | null; // userId другого редактирующего
+  members: UserDto[];
 }
 
 function CardView(props: CardViewProps) {
@@ -597,10 +637,24 @@ function CardView(props: CardViewProps) {
   const [title, setTitle] = useState(props.card.title);
   const [description, setDescription] = useState(props.card.description ?? '');
 
+  const editorName = props.editingBy
+    ? (props.members.find((m) => m.id === props.editingBy)?.name ?? 'участник')
+    : null;
+
+  const openModal = () => {
+    setOpen(true);
+    props.ws.editingStart(props.card.id);
+  };
+
+  const closeModal = () => {
+    setOpen(false);
+    props.ws.editingStop(props.card.id);
+  };
+
   const save = async () => {
     try {
-      await boardsApi.updateCard(props.card.id, { title: title.trim(), description: description || null });
-      setOpen(false);
+      props.ws.updateCard(props.card.id, { title: title.trim(), description: description || null });
+      closeModal();
       await props.reload();
     } catch (err) {
       props.onError(errorText(err));
@@ -609,13 +663,8 @@ function CardView(props: CardViewProps) {
 
   const remove = async () => {
     if (!window.confirm('Удалить карточку?')) return;
-    try {
-      await boardsApi.deleteCard(props.card.id);
-      setOpen(false);
-      await props.reload();
-    } catch (err) {
-      props.onError(errorText(err));
-    }
+    props.ws.deleteCard(props.card.id);
+    closeModal();
   };
 
   return (
@@ -629,13 +678,14 @@ function CardView(props: CardViewProps) {
         }}
         {...attributes}
         {...listeners}
-        onClick={() => setOpen(true)}
+        onClick={openModal}
       >
         {props.card.title}
+        {editorName && <span className="editing-badge">✏️ {editorName}</span>}
       </article>
 
       {open && (
-        <div className="modal-backdrop" onClick={() => setOpen(false)}>
+        <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal card" onClick={(e) => e.stopPropagation()}>
             <label>
               Заголовок
@@ -651,13 +701,18 @@ function CardView(props: CardViewProps) {
               />
             </label>
             <div className="modal-actions">
-              <button type="button" onClick={() => void save()}>
+              <button
+                type="button"
+                onClick={() => {
+                  void save();
+                }}
+              >
                 Сохранить
               </button>
-              <button type="button" className="danger" onClick={() => void remove()}>
+              <button type="button" className="danger" onClick={remove}>
                 Удалить
               </button>
-              <button type="button" className="link" onClick={() => setOpen(false)}>
+              <button type="button" className="link" onClick={closeModal}>
                 Закрыть
               </button>
             </div>
@@ -669,8 +724,7 @@ function CardView(props: CardViewProps) {
 }
 
 interface NewColumnFormProps {
-  boardId: string;
-  onCreate: (title: string) => Promise<void>;
+  onCreate: (title: string) => void;
 }
 
 function NewColumnForm(props: NewColumnFormProps) {

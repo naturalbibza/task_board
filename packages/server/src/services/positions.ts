@@ -1,6 +1,6 @@
 // Логика позиций (7.2, FR-6): вставка между соседями = среднее; вставка в конец =
 // last + STEP; при схлопывании зазора (< EPS) — перенормировка всей колонки одним SQL.
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, max } from 'drizzle-orm';
 import { sql, type SQL } from 'drizzle-orm';
 import type { CardDto, ColumnDto } from '@task-board/shared';
 import { db } from '../db';
@@ -12,6 +12,17 @@ const EPS = 0.001;
 
 type CardRow = typeof cards.$inferSelect;
 type ColumnRow = typeof columns.$inferSelect;
+
+/** Следующая позиция в конце списка (FR-6: вставка в конец = last + STEP). */
+export async function nextColumnPosition(boardId: string): Promise<number> {
+  const [row] = await db.select({ maxPos: max(columns.position) }).from(columns).where(eq(columns.boardId, boardId));
+  return (row?.maxPos ?? 0) + STEP;
+}
+
+export async function nextCardPosition(columnId: string): Promise<number> {
+  const [row] = await db.select({ maxPos: max(cards.position) }).from(cards).where(eq(cards.columnId, columnId));
+  return (row?.maxPos ?? 0) + STEP;
+}
 
 function cardDto(card: CardRow): CardDto {
   return {
