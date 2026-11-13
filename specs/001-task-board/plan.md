@@ -33,7 +33,7 @@
 |---|---|---|
 | Язык | TypeScript, strict | Единый язык клиента и сервера; типобезопасные контракты WS/REST через пакет `shared` |
 | Монорепо | pnpm workspaces | Общий `tsconfig`/eslint, пакет `shared` |
-| Frontend | React 18 + Vite | Стандарт, быстрый dev-сервер |
+| Frontend | React 19 + Vite 6 | Стандарт, быстрый dev-сервер |
 | Drag-n-drop | `@dnd-kit/core` + `@dnd-kit/sortable` | Активная поддержка, ts-native, работает по одной оси и между контейнерами |
 | Backend | Node 20, Express, Socket.IO | Задание требует WebSockets; Socket.IO даёт room'ы и reconnect |
 | ORM/БД | Drizzle ORM + drizzle-kit + PostgreSQL 16 | Схема на TypeScript, SQL-подобный API без «магии», генерация SQL-миграций |
@@ -47,8 +47,12 @@ web/
 ├── package.json              # workspaces, общие скрипты
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json        # strict, общий для всех пакетов
-├── docker-compose.yml        # prod-деплой: app + postgres + caddy
+├── AGENTS.md                 # инструкции для агентов
+├── Caddyfile                 # адрес сайта из env SITE_ADDRESS, прокси на app
+├── docker-compose.yml        # деплой: app + postgres + caddy
 ├── Dockerfile                # multi-stage: build client+server → рантайм
+├── .github/workflows/        # ci.yml (проверки), deploy.yml (CD на VPS)
+├── scripts/                  # deploy.ps1, миграционные/диагностические хелперы
 ├── .env.example
 ├── specs/                    # SDD-документы (эта папка)
 └── packages/
@@ -230,7 +234,7 @@ export const invites = pgTable("invites", {
 ### 8.2 CI/CD (фаза 3)
 
 - **CI** (`.github/workflows/ci.yml`): на push и PR в любой ветке — `pnpm install --frozen-lockfile`, `typecheck`, `lint`, `build`. Красная сборка блокирует мерж.
-- **CD** (`.github/workflows/deploy.yml`): при пуше в `main` после зелёного CI — rsync исходников на VPS → `docker compose build && up -d`. Тот же путь, что и ручной деплой, без registry и git на сервере.
+- **CD** (`.github/workflows/deploy.yml`): при пуше в `main` после зелёного CI — tar-загрузка исходников на VPS (как в ручном деплое; rsync на сервере нет) → `docker compose build && up -d` → health-check с ретраями.
 - Секреты Actions (создаются в UI GitHub): `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY` — выделенная ключ-пара только для деплоя; публичный ключ добавляется в `authorized_keys` пользователя `bibza`.
 - Правило: прод обновляется только через main; прямые правки на сервере запрещены (кроме секретов).
 
@@ -248,7 +252,7 @@ export const invites = pgTable("invites", {
 
 | Риск | Митигация |
 |---|---|
-| Socket.IO cookie-handshake неочевиден | Отдельная задача в фазе 3 с ручной проверкой до мутаций |
-| Деградация точности float-позиций | Правило перенормировки (§4), тест в фазе 5 |
+| Socket.IO cookie-handshake неочевиден | Отдельная задача в фазе 6 с ручной проверкой до мутаций |
+| Деградация точности float-позиций | Правило перенормировки (§4), тест в фазе 7 |
 | Два одновременных drag'а одного объекта | Server-authoritative + LWW по позиции; в v1 осознанно принимаем |
 | TLS/прокси на VPS | Caddy выбирается именно из-за простоты; весь деплой-контур (TLS, cookie, WSS-проксирование) отлаживается в фазе 2, задолго до реал-тайм-фаз |

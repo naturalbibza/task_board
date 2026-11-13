@@ -38,14 +38,14 @@
 - [x] 2.5 Процедура ре-деплоя одной командой (скрипт/Makefile): pull, build, up -d — `pnpm deploy:vps`
 - **Чекпоинт:** по HTTPS с домена открывается рабочая версия (регистрация/вход на проде); A6 выполнен частично. — **пройден полностью 2026-11-13**: https://bibza.ru работает (health/SPA/register 201, cookie HttpOnly+Secure+SameSite), TLS автоматический, ре-деплой одной командой. Секреты: мастер-копия `~/task-board.secrets.env`, переживает деплои. Ловушки дня — в DEV_NOTES.
 
-## Фаза 3. CI/CD из GitHub (NFR-9) ← новая
+## Фаза 3. CI/CD из GitHub (NFR-9) ✅
 
-- [ ] 3.1 `.github/workflows/ci.yml`: на push и PR — `pnpm install --frozen-lockfile`, `typecheck`, `lint`, `build` (Node 20, pnpm cache)
-- [ ] 3.2 Деплой-ключ: сгенерировать пару для Actions, публичный ключ — в `authorized_keys` bibza на VPS (делает агент)
-- [ ] 3.3 Секреты GitHub (создаёт владелец в UI репозитория, Settings → Secrets and variables → Actions): `SSH_HOST=45.81.255.219`, `SSH_USER=bibza`, `SSH_PRIVATE_KEY=<приватный ключ>`
-- [ ] 3.4 `.github/workflows/deploy.yml`: push в `main` (после зелёного CI) → rsync исходников на VPS → `docker compose build && up -d`; защищён `concurrency` (один деплой за раз)
-- [ ] 3.5 Запрет прямых правок на сервере: прод обновляется только через `main`
-- **Чекпоинт:** PR с правкой проходит CI; мерж в `main` → Actions деплоит; изменение видно на https://bibza.ru без ручных действий. Ручной `pnpm deploy:vps` остаётся запасным путём.
+- [x] 3.1 `.github/workflows/ci.yml`: на push и PR — `pnpm install --frozen-lockfile`, `typecheck`, `lint`, `build` (Node 20, pnpm cache); также `workflow_call` для deploy
+- [x] 3.2 Деплой-ключ: ed25519-пара для Actions, публичный ключ — в `authorized_keys` bibza на VPS
+- [x] 3.3 Секреты GitHub (создал владелец в UI): `SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`
+- [x] 3.4 `.github/workflows/deploy.yml`: push в `main` (после зелёного CI, reusable workflow) → tar-загрузка исходников → `docker compose build && up -d` → health-check с ретраями; `concurrency: deploy-production`
+- [x] 3.5 Правило: прод обновляется только через `main` (ручной `pnpm deploy:vps` — запасной путь)
+- **Чекпоинт:** PR с правкой проходит CI; мерж в `main` → Actions деплоит; изменение видно на https://bibza.ru без ручных действий. — **пройден 2026-11-13** (ci ✅ + deploy ✅ зелёные, контейнеры пересозданы Actions, prod health 200; по пути исправлено: CRLF в ключе из Windows-буфера, на сервере нет rsync → tar-over-ssh, health-check с ретраями по 5с).
 
 ## Фаза 4. Локальный запуск без PostgreSQL (NFR-10) ← новая
 

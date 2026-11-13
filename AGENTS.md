@@ -24,6 +24,9 @@ pnpm dev                # сервер + клиент в dev-режиме
 pnpm typecheck          # tsc --noEmit во всех пакетах
 pnpm lint               # eslint
 pnpm build              # сборка client и server
+pnpm deploy:vps         # ручной деплой на прод (запасной; автоматом деплоит CI/CD)
+pnpm --filter @task-board/server db:generate   # новая миграция из schema.ts
+pnpm --filter @task-board/server db:migrate    # применить миграции
 ```
 
 Принципы разработки: см. `specs/constitution.md` (strict TS, server-authoritative,
@@ -33,6 +36,8 @@ pnpm build              # сборка client и server
 
 - **Не коммитить и не пушить самостоятельно.** git commit / git push — только по явной
   просьбе пользователя; по умолчанию изменения просто оставляются в рабочей копии.
+  ⚠️ Пуш в `main` автоматически деплоит на прод (https://bibza.ru) через CI/CD —
+  поэтому пушить только закрытые фазы и по явной просьбе.
 
 - Контракты (типы и zod-схемы WS-событий, REST DTO) — только в `packages/shared`;
   в `client`/`server` их не дублировать.

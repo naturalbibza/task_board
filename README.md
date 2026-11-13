@@ -3,10 +3,12 @@
 Коллаборативная доска задач (типа Trello): drag-n-drop, обновления в реальном времени
 через WebSockets, шаринг досок по invite-ссылкам.
 
+**Прод: https://bibza.ru** (Docker Compose на VPS, TLS через Caddy)
+
 ## Стек
 
 TypeScript (strict) · pnpm workspaces · React + Vite · @dnd-kit · Node.js + Express +
-Socket.IO · PostgreSQL + Drizzle · zod · Docker Compose (VPS + Caddy/TLS)
+Socket.IO · PostgreSQL + Drizzle · zod · Docker Compose · GitHub Actions (CI/CD)
 
 ## Документация (Spec-Driven)
 
@@ -24,4 +26,12 @@ cp .env.example .env      # заполнить DATABASE_URL и JWT_SECRET
 pnpm dev                  # сервер + клиент в dev-режиме
 ```
 
-Статус: ✅ фазы 0–2 (скелет, аккаунты, прод-деплой с HTTPS) → 🚧 фаза 3 (доски и контент). Прод: **https://bibza.ru**
+## Деплой
+
+Автоматический: пуш в `main` → GitHub Actions (проверки → деплой на VPS → health-check).
+
+Ручной запасной путь: `pnpm deploy:vps` (параметризуется: `-Target user@host`,
+`-Key путь\к\ключу` или env `TASKBOARD_DEPLOY_TARGET` / `TASKBOARD_DEPLOY_KEY`).
+Секреты прода хранятся только на сервере (`.env` + мастер-копия вне каталога деплоя).
+
+Статус: ✅ фазы 0–3 (скелет, аккаунты, прод с HTTPS, CI/CD) → 🚧 фаза 4 (локальный запуск без PostgreSQL)
