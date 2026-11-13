@@ -50,7 +50,6 @@ check('участники: 1', r.data.members.length === 1);
 // 2. Колонка и карточка
 r = await call(a.cookie, 'POST', `/boards/${boardId}/columns`, { title: 'Тест колонка' });
 check('POST column → 201', r.status === 201);
-const columnId = r.data.column.column ?? r.data.column.id;
 const colId = r.data.column.id;
 
 r = await call(a.cookie, 'POST', `/columns/${colId}/cards`, { title: 'Тест карточка', description: 'описание' });
