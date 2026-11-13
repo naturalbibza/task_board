@@ -69,9 +69,19 @@ jobs:
 
       - name: Health check
         run: |
-          sleep 10
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes $SSH_TARGET '
             cd ~/task-board
             SITE=$(grep "^SITE_ADDRESS=" .env | cut -d= -f2- | cut -d, -f1 | tr -d " ")
-            curl -fsS --max-time 20 "https://$SITE/api/health"
+            echo "health target: https://$SITE/api/health"
+            ok=""
+            for i in 1 2 3 4 5 6; do
+              sleep 5
+              if curl -fsS --max-time 20 "https://$SITE/api/health"; then ok=1; break; fi
+            done
+            if [ -z "$ok" ]; then
+              echo "health check failed"
+              docker compose ps
+              docker compose logs app --tail 20
+              exit 1
+            fi
           '
