@@ -270,6 +270,19 @@ button:disabled {
   cursor: grabbing;
 }
 
+/* --- DragOverlay --- */
+
+.overlay-card {
+  box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
+  rotate: 2deg;
+}
+
+.overlay-column {
+  box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
+  rotate: 1deg;
+  opacity: 0.95;
+}
+
 .column-header h2 {
   margin: 0;
   font-size: 0.95rem;
@@ -306,6 +319,13 @@ button:disabled {
 
 .card-view:hover {
   background: #f4f5f7;
+}
+
+.dragging-ghost {
+  opacity: 0.4;
+  outline: 2px dashed #0c66e4;
+  outline-offset: -2px;
+  background: #e8f0fe;
 }
 
 .card-create input {
