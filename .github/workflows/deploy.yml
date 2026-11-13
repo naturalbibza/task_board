@@ -1,5 +1,5 @@
 # CD: деплой на VPS после зелёного CI при пуше в main.
-# Путь тот же, что у ручного деплоя: rsync исходников -> compose build -> up.
+# Путь тот же, что у ручного деплоя: tar-загрузка исходников -> compose build -> up.
 # Секреты Actions: SSH_HOST, SSH_USER, SSH_PRIVATE_KEY (создаёт владелец репозитория).
 name: deploy
 
@@ -20,6 +20,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: checks
+    env:
+      SSH_TARGET: ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,24 +33,29 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'echo SSH-AUTH-OK'
+            $SSH_TARGET 'echo SSH-AUTH-OK'
 
-      - name: Rsync sources
+      - name: Upload sources
+        shell: bash
         run: |
-          rsync -a --delete \
-            --exclude=.git \
-            --exclude=.idea \
-            --exclude=node_modules \
-            --exclude=dist \
-            --exclude='*.env' \
-            --exclude=DEV_NOTES.md \
-            --exclude=specs \
-            ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/task-board/ \
-            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes"
+          tar --exclude=./.git \
+              --exclude=./.idea \
+              --exclude=./node_modules \
+              --exclude=./dist \
+              --exclude='*.env' \
+              --exclude=./DEV_NOTES.md \
+              --exclude=./specs \
+              -czf /tmp/deploy.tar.gz .
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            $SSH_TARGET 'rm -rf ~/task-board && mkdir -p ~/task-board'
+          scp -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            /tmp/deploy.tar.gz $SSH_TARGET:~/deploy.tar.gz
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            $SSH_TARGET 'tar -xzf ~/deploy.tar.gz -C ~/task-board && rm ~/deploy.tar.gz'
 
       - name: Sync secrets, build and run
         run: |
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes $SSH_TARGET '
             set -e
             cd ~/task-board
             if [ ! -f ~/task-board.secrets.env ]; then
@@ -63,7 +70,7 @@ jobs:
       - name: Health check
         run: |
           sleep 10
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes $SSH_TARGET '
             cd ~/task-board
             SITE=$(grep "^SITE_ADDRESS=" .env | cut -d= -f2- | cut -d, -f1 | tr -d " ")
             curl -fsS --max-time 20 "https://$SITE/api/health"
