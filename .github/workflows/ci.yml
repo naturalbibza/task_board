@@ -1,10 +1,12 @@
-# CI: типовые проверки на каждый push и PR (а также reusable для deploy).
+# CI: типовые проверки на push в ветки и PR (а также reusable для deploy).
+# Пуш в main не триггерит CI напрямую — его проверки запускает deploy.yml,
+# чтобы не гонять их дважды.
 name: ci
 
 on:
   push:
-    branches:
-      - '**'
+    branches-ignore:
+      - main
   pull_request:
   workflow_call:
 
