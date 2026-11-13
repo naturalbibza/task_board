@@ -1,7 +1,8 @@
 import { SignJWT, jwtVerify } from 'jose';
-import type { CookieOptions, Response } from 'express';
+import type { CookieOptions, RequestHandler, Response } from 'express';
 import type { UserDto } from '@task-board/shared';
 import type { User } from '../db/schema';
+import { HttpError } from './errors';
 import { env } from '../db';
 
 export const COOKIE_NAME = 'token';
@@ -44,6 +45,16 @@ export async function setSessionCookie(res: Response, userId: string): Promise<v
 
 export function clearSessionCookie(res: Response): void {
   res.clearCookie(COOKIE_NAME, { path: '/' });
+}
+
+/** userId из cookie или HttpError 401 — для всех роутов, требующих входа. */
+export async function requireUserId(req: RequestHandler extends never ? never : { cookies: unknown }): Promise<string> {
+  const token = (req.cookies as Record<string, string | undefined>)?.[COOKIE_NAME];
+  const userId = token ? await verifySessionToken(token) : null;
+  if (!userId) {
+    throw new HttpError(401, 'UNAUTHORIZED', 'Требуется вход');
+  }
+  return userId;
 }
 
 export function toUserDto(user: User): UserDto {

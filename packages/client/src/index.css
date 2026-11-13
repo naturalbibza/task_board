@@ -112,3 +112,215 @@ button:disabled {
   font-weight: 400;
   color: #6b778c;
 }
+
+/* --- Список досок --- */
+
+.board-create {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.board-create input {
+  flex: 1;
+  font: inherit;
+  padding: 0.5rem 0.6rem;
+  border: 2px solid #dcdfe4;
+  border-radius: 6px;
+}
+
+.board-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.75rem;
+}
+
+.board-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.board-link {
+  background: none;
+  color: #0c66e4;
+  font-weight: 600;
+  text-align: left;
+  padding: 0;
+  font-size: 1.05rem;
+}
+
+.board-meta {
+  font-size: 0.85rem;
+  color: #6b778c;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.link.danger {
+  color: #ca3521;
+}
+
+/* --- Экран доски --- */
+
+.board-page {
+  min-height: 100vh;
+  background: #dfe1e6;
+  padding-bottom: 2rem;
+}
+
+.board-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+
+.board-header h1 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.editable {
+  cursor: pointer;
+}
+
+.columns {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  overflow-x: auto;
+  min-height: calc(100vh - 60px);
+}
+
+.column {
+  background: #ebecf0;
+  border-radius: 8px;
+  width: 272px;
+  flex-shrink: 0;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.new-column {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.new-column input {
+  width: 100%;
+  font: inherit;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.column-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.column-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.column-header input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: 2px solid #0c66e4;
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+}
+
+.column-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 10px;
+}
+
+.card-view {
+  background: #fff;
+  border-radius: 6px;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 15%);
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+  font-size: 0.92rem;
+  word-break: break-word;
+}
+
+.card-view:hover {
+  background: #f4f5f7;
+}
+
+.card-create input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.card-create input:focus {
+  background: #fff;
+  outline: none;
+}
+
+/* --- Модальное окно карточки --- */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(23 43 77 / 50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.modal {
+  width: min(480px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.modal input,
+.modal textarea {
+  font: inherit;
+  font-weight: 400;
+  padding: 0.5rem 0.6rem;
+  border: 2px solid #dcdfe4;
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
