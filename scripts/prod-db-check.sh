@@ -1,18 +1,15 @@
 SQL="
-SELECT b.id, b.title, b.\"createdAt\", count(DISTINCT bm.\"userId\") AS members,
-       count(DISTINCT k.id) AS cards,
-       max(k.\"updatedAt\") AS last_card_update
-FROM boards b
-LEFT JOIN board_members bm ON bm.\"boardId\" = b.id
-LEFT JOIN columns c ON c.\"boardId\" = b.id
-LEFT JOIN cards k ON k.\"columnId\" = c.id
-GROUP BY b.id, b.title, b.\"createdAt\"
-ORDER BY b.\"createdAt\" DESC
-LIMIT 10;
+SELECT b.id, b.title, b.\"createdAt\"
+FROM boards b WHERE b.title = 'Моя доска';
 
-SELECT k.title, k.\"updatedAt\", c.title AS col, k.position
+SELECT c.title, c.position AS col_pos, count(k.id) AS cards
+FROM columns c LEFT JOIN cards k ON k.\"columnId\" = c.id
+WHERE c.\"boardId\" = (SELECT id FROM boards WHERE title = 'Моя доска' ORDER BY \"createdAt\" LIMIT 1)
+GROUP BY c.id, c.title, c.position ORDER BY c.position;
+
+SELECT k.id, k.title, c.title AS col, k.position, k.\"updatedAt\"
 FROM cards k JOIN columns c ON c.id = k.\"columnId\"
-ORDER BY k.\"updatedAt\" DESC LIMIT 10;
+WHERE c.\"boardId\" = (SELECT id FROM boards WHERE title = 'Моя доска' ORDER BY \"createdAt\" LIMIT 1);
 "
 cd ~/task-board || exit 1
 echo "$SQL" | docker compose exec -T db psql -U postgres -d task_board

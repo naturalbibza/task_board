@@ -39,6 +39,7 @@ export function BoardPage() {
   const [online, setOnline] = useState<PresenceUser[]>([]);
   const [editingByCard, setEditingByCard] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
 
   const sensors = useSensors(
@@ -59,6 +60,7 @@ export function BoardPage() {
   );
 
   const onDragStart = (event: DragStartEvent) => {
+    console.log('[dnd] start', String(event.active.id), event.active.data.current?.type);
     lastMoveRef.current = null;
     const type = event.active.data.current?.type as 'card' | 'column' | undefined;
     if (type === 'card') {
@@ -107,6 +109,7 @@ export function BoardPage() {
     const ins = insertion(list, index ?? list.length);
     optimisticMoveCard(cardId, targetColumnId, ins.position);
     lastMoveRef.current = { cardId, toColumnId: targetColumnId, beforeId: ins.beforeId, afterId: ins.afterId, position: ins.position };
+    console.log('[dnd] over moved', cardId, '->', targetColumnId, 'pos', ins.position);
   };
 
   /** Расчёт соседей и позиции после вставки в упорядоченный список. */
@@ -141,13 +144,16 @@ export function BoardPage() {
 
   const onDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    clearDrag();
+    console.log('[dnd] end', String(active.id), 'over=', over ? String(over.id) : 'null', 'overType=', over?.data.current?.type, 'lastMove=', Boolean(lastMoveRef.current));
 
     // Дроп вне колонок: вернуть карточку в исходную (FR-7, как в Trello)
     if (!over) {
       const original = activeDrag?.originalCard;
       if (original) {
         setSnapshot((prev) => prev && ({ ...prev, cards: prev.cards.map((c) => (c.id === original.id ? original : c)) }));
+        // Пользователю важно понимать, что это штатная отмена, а не сбой
+        setNotice('Перетаскивание отменено — отпустите карточку над колонкой');
+        setTimeout(() => setNotice(null), 3000);
       }
       return;
     }
@@ -461,6 +467,7 @@ export function BoardPage() {
       </DndContext>
 
       {error && <p className="error">{error}</p>}
+      {notice && <div className="toast">{notice}</div>}
     </main>
   );
 }
