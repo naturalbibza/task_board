@@ -164,6 +164,34 @@ button:disabled {
   color: #ca3521;
 }
 
+/* --- Presence --- */
+
+.members-bar {
+  margin-left: auto;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.member-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #e3fcef;
+  color: #006644;
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.online-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22a06b;
+}
+
 /* --- Экран доски --- */
 
 .board-page {

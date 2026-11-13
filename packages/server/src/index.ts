@@ -1,12 +1,16 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { createServer } from 'node:http';
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import { Server as SocketIOServer } from 'socket.io';
 import { env } from './db';
 import { authRouter } from './http/auth';
 import { boardsRouter, cardsRouter, columnsRouter } from './http/boards';
 import { errorHandler } from './http/errors';
+import { registerSocketHandlers } from './ws';
+import type { ClientToServerEvents, ServerToClientEvents } from '@task-board/shared';
 
 const app = express();
 
@@ -37,6 +41,11 @@ if (existsSync(clientDist)) {
 
 app.use(errorHandler);
 
-app.listen(env.PORT, () => {
+// Один HTTP-сервер обслуживает и REST, и WebSocket (план §1)
+const httpServer = createServer(app);
+const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer);
+registerSocketHandlers(io);
+
+httpServer.listen(env.PORT, () => {
   console.log(`[server] listening on http://localhost:${env.PORT}`);
 });

@@ -98,7 +98,7 @@ async function nextCardPosition(columnId: string): Promise<number> {
 }
 
 /** РџРѕР»РЅС‹Р№ СЃРЅР°РїС€РѕС‚ РґРѕСЃРєРё (FR-9: С‚РѕС‚ Р¶Рµ С„РѕСЂРјР°С‚ Р±СѓРґРµС‚ Сѓ WS board:state). */
-async function snapshot(boardId: string, role: Access['role']): Promise<BoardSnapshot> {
+export async function boardSnapshot(boardId: string, role: Access['role']): Promise<BoardSnapshot> {
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
   if (!board) {
     throw new HttpError(404, 'BOARD_NOT_FOUND', 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°');
@@ -167,7 +167,7 @@ const createBoard: RequestHandler<{ id: string }> = async (req, res) => {
 const getBoard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
   const access = await boardAccess(userId, req.params.id);
-  res.json(await snapshot(access.boardId, access.role));
+  res.json(await boardSnapshot(access.boardId, access.role));
 };
 
 const renameBoard: RequestHandler<{ id: string }> = async (req, res) => {
@@ -178,7 +178,7 @@ const renameBoard: RequestHandler<{ id: string }> = async (req, res) => {
   }
   const { title } = renameBoardSchema.parse(req.body);
   await db.update(boards).set({ title }).where(eq(boards.id, access.boardId));
-  res.json(await snapshot(access.boardId, access.role));
+  res.json(await boardSnapshot(access.boardId, access.role));
 };
 
 const deleteBoard: RequestHandler<{ id: string }> = async (req, res) => {

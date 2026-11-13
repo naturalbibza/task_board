@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import type { BoardSnapshot, CardDto } from '@task-board/shared';
+import type { BoardSnapshot, CardDto, PresenceUser } from '@task-board/shared';
 import * as boardsApi from '../api/boards';
+import { getSocket } from '../api/socket';
 import { errorText } from '../state/auth-context';
+import { MembersBar } from '../components/MembersBar';
 
 export function BoardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [snapshot, setSnapshot] = useState<BoardSnapshot | null>(null);
+  const [online, setOnline] = useState<PresenceUser[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
@@ -21,9 +24,36 @@ export function BoardPage() {
     }
   }, [id]);
 
+  // WS: снапшот и presence приходят с сервера (FR-9, FR-13, FR-14)
   useEffect(() => {
-    void reload();
-  }, [reload]);
+    if (!id) return;
+    const socket = getSocket();
+
+    const onState = (snap: BoardSnapshot) => {
+      setSnapshot(snap);
+      setError(null);
+    };
+    const onPresence = (payload: { boardId: string; users: PresenceUser[] }) => {
+      if (payload.boardId === id) setOnline(payload.users);
+    };
+    const onWsError = (e: { code: string; message: string }) => setError(e.message);
+
+    socket.on('board:state', onState);
+    socket.on('presence:update', onPresence);
+    socket.on('ws:error', onWsError);
+    socket.emit('board:join', { boardId: id });
+
+    return () => {
+      socket.emit('board:leave', { boardId: id });
+      socket.off('board:state', onState);
+      socket.off('presence:update', onPresence);
+      socket.off('ws:error', onWsError);
+    };
+  }, [id]);
+
+  useEffect(() => {
+    if (error) void reload();
+  }, [error, reload]);
 
   if (error) {
     return (
@@ -49,6 +79,7 @@ export function BoardPage() {
           onRename={async (title) => setSnapshot(await boardsApi.renameBoard(snapshot.board.id, title))}
           onError={setError}
         />
+        <MembersBar online={online} members={snapshot.members} />
       </header>
 
       <div className="columns">

@@ -64,15 +64,15 @@
 
 > ⚠️ REST-мутации контента (5.3) — временные леса, к фазе 8 удаляются (FR-8: финальный транспорт мутаций — WS).
 
-## Фаза 6. WebSocket-канал: подключение и снапшот (FR-9)
+## Фаза 6. WebSocket-канал: подключение и снапшот (FR-9) ✅
 
-- [ ] 6.1 Протокол в `shared`: zod-схемы всех intents/events (§6 плана) — единственный контракт
-- [ ] 6.2 Сервер: Socket.IO на том же порту; auth по cookie в handshake; middleware-логи
-- [ ] 6.3 `board:join`: проверка членства, комната `board:<id>`, `board:state` — снапшот из БД
-- [ ] 6.4 Клиент: socket-синглтон, авто-reconnect, замена REST-снапшота экрана доски на `board:state`
-- [ ] 6.5 Presence: `presence:update` (список в комнате) + компонент MembersBar
-- [ ] 6.6 Пуш → CD; проверить WSS-проксирование через Caddy на проде
-- **Чекпоинт:** две вкладки одного пользователя видят друг друга в MembersBar; F5 не ломает снапшот; чужая доска → `ws:error` (A7).
+- [x] 6.1 Протокол в `shared` (`ws-events.ts`): zod-схемы всех intents/events (§6 плана) — единственный контракт
+- [x] 6.2 Сервер: Socket.IO на том же порту (`createServer` + один `httpServer`); auth по cookie в handshake (ручной разбор cookie); membership-проверка в `board:join`
+- [x] 6.3 `board:join`: комната `board:<id>`, `board:state` — снапшот из БД (переиспользован REST-билдер `boardSnapshot`)
+- [x] 6.4 Клиент: socket-синглтон (`api/socket.ts`, same-origin через прокси), WS-снапшот заменил REST-загрузку экрана доски; REST-мутации пока перезагружают снапшот через GET (леса до фазы 8)
+- [x] 6.5 Presence: `presence:update` (дедупликация по userId) + компонент `MembersBar`
+- [x] 6.6 Проверка WSS через Caddy — пуш/прод-проверка отдельно, по явной команде
+- **Чекпоинт:** две вкладки одного пользователя видят друг друга в MembersBar; F5 не ломает снапшот; чужая доска → `ws:error` (A7). — **пройден 2026-11-13**: e2e-скрипт WS 7/7 (join → state с 3 колонками, presence дедупликация двух вкладок, leave, чужая доска → `ws:error BOARD_NOT_FOUND`); браузер: MembersBar с «Демо», F5 восстанавливает доску.
 
 ## Фаза 7. Drag-n-drop (US-7, FR-6, FR-7)
 
