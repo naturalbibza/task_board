@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import type { BoardDto } from '@task-board/shared';
 import * as boardsApi from '../api/boards';
 import { errorText, useAuth } from '../state/auth-context';
@@ -22,7 +22,8 @@ export function BoardsPage() {
     if (user) reload();
   }, [user, reload]);
 
-  if (loading || !user) return null;
+  if (loading) return <main className="page">Загрузка…</main>;
+  if (!user) return <Navigate to="/login" replace />;
 
   const onCreate = async () => {
     const title = newTitle.trim();
