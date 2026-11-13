@@ -4,7 +4,8 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   closestCorners,
   pointerWithin,
   useDraggable,
@@ -145,8 +146,11 @@ export function BoardPage() {
     [],
   );
 
+  // Мышь — с порогом 5 px; тач — «долгое нажатие» (220 мс), чтобы свайп
+  // оставался прокруткой доски, а не превращался в случайный перенос.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 

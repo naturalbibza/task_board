@@ -333,7 +333,7 @@ button:disabled {
   cursor: pointer;
   font-size: 0.92rem;
   word-break: break-word;
-  touch-action: none; /* на телефоне drag вместо скролла страницы */
+  touch-action: manipulation; /* свайп по карточке = прокрутка; перенос — долгое нажатие */
 }
 
 .drag-handle {
