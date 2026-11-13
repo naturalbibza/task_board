@@ -157,6 +157,29 @@ export function BoardPage() {
       }
       return;
     }
+    // Дроп на «тень» (сама карточка): применяем последнее намерение из onDragOver.
+    // Самый частый путь реального пользователя — отпускание над слотом-призраком.
+    if (active.data.current?.type === 'card' && String(active.id) === String(over.id)) {
+      const last = lastMoveRef.current;
+      if (last && last.toColumnId !== activeDrag?.originalCard?.columnId) {
+        optimisticMoveCard(last.cardId, last.toColumnId, last.position);
+        getSocket().emit('card:move', {
+          id: last.cardId,
+          toColumnId: last.toColumnId,
+          beforeId: last.beforeId,
+          afterId: last.afterId,
+        });
+      } else if (activeDrag?.originalCard) {
+        setSnapshot(
+          (prev) =>
+            prev && ({
+              ...prev,
+              cards: prev.cards.map((c) => (c.id === activeDrag.originalCard!.id ? activeDrag.originalCard! : c)),
+            }),
+        );
+      }
+      return;
+    }
     if (!snapshot || String(active.id) === String(over.id)) return;
     const activeType = active.data.current?.type as 'card' | 'column' | undefined;
 
