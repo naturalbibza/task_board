@@ -84,6 +84,8 @@ export interface ClientToServerEvents {
   'board:rename': (payload: { boardId: string; title: string }) => void;
   'card:editing-start': (payload: { cardId: string }) => void;
   'card:editing-stop': (payload: { cardId: string }) => void;
+  /** Проверка живости соединения (ack приходит только от живого сервера). */
+  ping: (ack: () => void) => void;
 }
 
 // Пользовательский тип в сокетных данных (socket.data)

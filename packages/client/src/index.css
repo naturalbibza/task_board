@@ -315,6 +315,11 @@ button:disabled {
   cursor: pointer;
   font-size: 0.92rem;
   word-break: break-word;
+  touch-action: none; /* на телефоне drag вместо скролла страницы */
+}
+
+.drag-handle {
+  touch-action: none;
 }
 
 .card-view:hover {

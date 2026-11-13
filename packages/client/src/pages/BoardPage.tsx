@@ -292,10 +292,23 @@ export function BoardPage() {
     socket.on('card:deleted', onCardDeleted);
     socket.on('board:updated', onBoardUpdated);
     socket.on('presence:editing', onEditing);
-    socket.emit('board:join', { boardId: id });
+
+    // Переподключение (потеря сети, bfcache, рестарт сервера): заново вступаем
+    // в комнату доски — иначе события мутаций не доходят, а emits теряются.
+    const join = () => socket.emit('board:join', { boardId: id });
+    const onConnect = () => join();
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted && !socket.connected) socket.connect();
+      if (socket.connected) join();
+    };
+    socket.on('connect', onConnect);
+    window.addEventListener('pageshow', onPageShow);
+    if (socket.connected) join();
 
     return () => {
-      socket.emit('board:leave', { boardId: id });
+      if (socket.connected) socket.emit('board:leave', { boardId: id });
+      socket.off('connect', onConnect);
+      window.removeEventListener('pageshow', onPageShow);
       socket.off('board:state', onState);
       socket.off('presence:update', onPresence);
       socket.off('ws:error', onWsError);

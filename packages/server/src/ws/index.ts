@@ -169,6 +169,11 @@ export function registerSocketHandlers(io: Io): void {
       }
     });
 
+    // Liveness-пинг: ack только от живого соединения (клиентский watchdog)
+    socket.on('ping', (ack) => {
+      if (typeof ack === 'function') ack();
+    });
+
     // --- Мутации контента (FR-8, фаза 8): строго через per-board очередь ---
 
     socket.on('column:create', async (raw) => {
