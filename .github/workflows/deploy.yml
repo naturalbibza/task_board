@@ -26,9 +26,12 @@ jobs:
       - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          # Ключ, вставленный из Windows UI, может содержать CRLF — нормализуем
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} 'echo SSH-AUTH-OK'
 
       - name: Rsync sources
         run: |
@@ -41,11 +44,11 @@ jobs:
             --exclude=DEV_NOTES.md \
             --exclude=specs \
             ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/task-board/ \
-            -e "ssh -i ~/.ssh/deploy_key"
+            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes"
 
       - name: Sync secrets, build and run
         run: |
-          ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
             set -e
             cd ~/task-board
             if [ ! -f ~/task-board.secrets.env ]; then
@@ -60,7 +63,7 @@ jobs:
       - name: Health check
         run: |
           sleep 10
-          ssh -i ~/.ssh/deploy_key ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o BatchMode=yes ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} '
             cd ~/task-board
             SITE=$(grep "^SITE_ADDRESS=" .env | cut -d= -f2- | cut -d, -f1 | tr -d " ")
             curl -fsS --max-time 20 "https://$SITE/api/health"
