@@ -19,6 +19,12 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     res.status(err.status).json({ error: { code: err.code, message: err.message } } satisfies ApiErrorBody);
     return;
   }
+  // Ошибки разбора тела запроса от body-parser (entity.parse.failed и т.п.)
+  const status = (err as { status?: number }).status;
+  if (typeof status === 'number' && status < 500) {
+    res.status(status).json({ error: { code: 'VALIDATION', message: 'Некорректное тело запроса' } });
+    return;
+  }
   if (err instanceof ZodError) {
     res.status(400).json({ error: { code: 'VALIDATION', message: err.issues[0]?.message ?? 'Некорректные данные' } });
     return;

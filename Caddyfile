@@ -1,0 +1,6 @@
+# Caddy: адрес сайта задаётся через env SITE_ADDRESS (см. docker-compose.yml).
+# По умолчанию — :80 (HTTP по IP/имени хоста); на проде SITE_ADDRESS=bibza.ru,www.bibza.ru
+# задаётся в серверном .env, и Caddy сам получает сертификаты Let's Encrypt.
+{$SITE_ADDRESS::80} {
+	reverse_proxy app:3001
+}

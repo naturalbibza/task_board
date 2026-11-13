@@ -11,7 +11,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "deploy:vps": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/deploy.ps1"
   },
   "devDependencies": {
     "eslint": "^9.0.0",

@@ -1,0 +1,54 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: '3001'
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD:?set in server .env}@db:5432/task_board
+      JWT_SECRET: ${JWT_SECRET:?set in server .env}
+      # Заполняются после привязки домена (до тех пор куки без флага Secure)
+      COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
+      ORIGIN: ${ORIGIN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Снаружи только Caddy; app доступен лишь внутри compose-сети
+    ports:
+      - '127.0.0.1:3001:3001'
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in server .env}
+      POSTGRES_DB: task_board
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d task_board']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      # Адрес сайта для Caddyfile; по умолчанию :80, на проде — домен(ы) из .env
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

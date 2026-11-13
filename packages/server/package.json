@@ -8,7 +8,7 @@
     "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "tsx src/migrate.ts"
   },
   "dependencies": {
     "@task-board/shared": "workspace:*",

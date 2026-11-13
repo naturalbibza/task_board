@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.gitattributes
+.idea
+.env
+.env.*
+!.env.example
+DEV_NOTES.md
+specs

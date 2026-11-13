@@ -79,6 +79,8 @@
 - NFR-6. **Деплой:** Docker Compose на арендованном VPS — `app` (сборка client+server) + `postgres` + обратный прокси Caddy с автоматическим TLS; БД — PostgreSQL в Compose (том для данных).
 - NFR-7. Конфигурация через env-переменные (`.env`, `.env.example` в репозитории); секреты в репозиторий не попадают.
 - NFR-8. Ошибки WS/HTTP — единый формат `{ error: { code, message } }`.
+- NFR-9. **CI/CD из GitHub (GitHub Actions):** CI — на каждый push и PR выполняются install/typecheck/lint/build; CD — при пуше в `main` автоматический деплой на VPS по SSH (rsync исходников → `docker compose build && up -d`). Доступ runner'а к серверу — по выделенному SSH-ключу из секретов Actions; секреты в репозитории не хранятся.
+- NFR-10. **Автономный локальный запуск:** на машине без сети, Docker и PostgreSQL проект полностью работает (`pnpm install && pnpm dev`): при отсутствии `DATABASE_URL` сервер сам поднимает встроенный PostgreSQL (embedded-бинарники, данные локально); локальная БД не синхронизируется с продовой.
 
 ## 6. Вне объёма v1
 

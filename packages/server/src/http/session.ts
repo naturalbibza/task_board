@@ -11,7 +11,8 @@ export function cookieOptions(): CookieOptions {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    // Secure только когда прод обслуживается по HTTPS (ORIGIN задаётся после домена)
+    secure: env.ORIGIN?.startsWith('https://') ?? false,
     maxAge: MAX_AGE_MS,
     path: '/',
   };
