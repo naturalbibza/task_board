@@ -8,6 +8,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { env } from './db';
 import { authRouter } from './http/auth';
 import { boardsRouter } from './http/boards';
+import { createInvite, invitesRouter, joinRouter, listInvites } from './http/invites';
 import { errorHandler } from './http/errors';
 import { registerSocketHandlers } from './ws';
 import type { ClientToServerEvents, ServerToClientEvents } from '@task-board/shared';
@@ -23,6 +24,10 @@ app.get('/api/health', (_req, res) => {
 
 app.use('/api/auth', authRouter);
 app.use('/api/boards', boardsRouter);
+boardsRouter.get('/:id/invites', listInvites);
+boardsRouter.post("/:id/invites", createInvite);
+app.use('/api/invites', invitesRouter);
+app.use('/api/join', joinRouter);
 
 // Прод: раздаём собранный клиентский бандл и SPA-fallback (в dev этим занимается Vite)
 const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');

@@ -22,3 +22,28 @@ export function renameBoard(id: string, title: string): Promise<BoardSnapshot> {
 export function deleteBoard(id: string): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/boards/${id}`, { method: 'DELETE' });
 }
+
+// --- Шаринг (фаза 9) ---
+
+export type InviteDto = {
+  id: string;
+  token: string;
+  expiresAt: string;
+  revoked: boolean;
+};
+
+export function listInvites(boardId: string): Promise<{ invites: InviteDto[] }> {
+  return api<{ invites: InviteDto[] }>(`/boards/${boardId}/invites`);
+}
+
+export function createInvite(boardId: string): Promise<{ invite: InviteDto }> {
+  return api<{ invite: InviteDto }>(`/boards/${boardId}/invites`, { method: 'POST' });
+}
+
+export function revokeInvite(inviteId: string): Promise<{ invite: InviteDto }> {
+  return api<{ invite: InviteDto }>(`/invites/${inviteId}`, { method: 'PATCH' });
+}
+
+export function joinByToken(token: string): Promise<{ boardId: string; boardTitle: string }> {
+  return api<{ boardId: string; boardTitle: string }>(`/join/${token}`);
+}

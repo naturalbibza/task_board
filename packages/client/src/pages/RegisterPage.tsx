@@ -1,9 +1,13 @@
 import { useState, type FormEvent } from 'react';
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
 import { errorText, useAuth } from '../state/auth-context';
 
 export function RegisterPage() {
   const { user, loading, register } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Возврат на исходную страницу после регистрации (FR-15: invite → регистрация → доска)
+  const next = (location.state as { from?: string } | null)?.from ?? '/boards';
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
@@ -12,7 +16,7 @@ export function RegisterPage() {
   const [busy, setBusy] = useState(false);
 
   if (loading) return null;
-  if (user) return <Navigate to="/boards" replace />;
+  if (user) return <Navigate to={next} replace />;
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -24,6 +28,7 @@ export function RegisterPage() {
     setBusy(true);
     try {
       await register({ email, password, name: name.trim() || undefined });
+      navigate(next, { replace: true });
     } catch (err) {
       setError(errorText(err));
     } finally {

@@ -21,6 +21,7 @@ import * as boardsApi from '../api/boards';
 import { getSocket } from '../api/socket';
 import { errorText } from '../state/auth-context';
 import { MembersBar } from '../components/MembersBar';
+import { ShareModal } from '../components/ShareModal';
 
 const STEP = 1024;
 
@@ -38,6 +39,7 @@ export function BoardPage() {
   const [online, setOnline] = useState<PresenceUser[]>([]);
   const [editingByCard, setEditingByCard] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -376,6 +378,14 @@ export function BoardPage() {
           onError={setError}
         />
         <MembersBar online={online} members={snapshot.members} />
+        {snapshot.board.role === 'OWNER' && (
+          <button type="button" onClick={() => setShareOpen(true)}>
+            Поделиться
+          </button>
+        )}
+        {shareOpen && (
+          <ShareModal boardId={snapshot.board.id} members={snapshot.members} onClose={() => setShareOpen(false)} />
+        )}
       </header>
 
       <DndContext
