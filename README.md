@@ -22,9 +22,17 @@ Socket.IO · PostgreSQL + Drizzle · zod · Docker Compose · GitHub Actions (CI
 
 ```bash
 pnpm install
-cp .env.example .env      # заполнить DATABASE_URL и JWT_SECRET
-pnpm dev                  # сервер + клиент в dev-режиме
+pnpm dev                  # без .env — сервер сам поднимет встроенный PostgreSQL (порт 54329)
 ```
+
+Ничего устанавливать и настраивать больше не нужно: без `DATABASE_URL` и `JWT_SECRET`
+сервер работает в автономном режиме (данные — в `packages/server/.localdb/`, в git не попадают).
+Бинарники встроенного PostgreSQL скачиваются один раз при `pnpm install`.
+
+С внешней БД: скопируйте `.env.example` в `packages/server/.env` и заполните
+`DATABASE_URL`/`JWT_SECRET` (например, на локальный контейнер Postgres на порту 5433).
+
+Полный стек одним контейнером (если есть Docker): `docker compose up -d` — как на проде.
 
 ## Деплой
 
@@ -34,4 +42,4 @@ pnpm dev                  # сервер + клиент в dev-режиме
 `-Key путь\к\ключу` или env `TASKBOARD_DEPLOY_TARGET` / `TASKBOARD_DEPLOY_KEY`).
 Секреты прода хранятся только на сервере (`.env` + мастер-копия вне каталога деплоя).
 
-Статус: ✅ фазы 0–3 (скелет, аккаунты, прод с HTTPS, CI/CD) → 🚧 фаза 4 (локальный запуск без PostgreSQL)
+Статус: ✅ фазы 0–4 (скелет, аккаунты, прод с HTTPS, CI/CD, офлайн-режим) → 🚧 фаза 5 (доски и контент)

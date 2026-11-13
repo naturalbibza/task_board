@@ -15,6 +15,8 @@ build/
 # --- Локальные dev-БД ---
 *.db
 *.sqlite
+packages/server/.localdb/
+packages/server/.localdb.jwt
 
 # --- Логи ---
 logs/
