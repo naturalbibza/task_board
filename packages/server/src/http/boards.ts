@@ -26,7 +26,7 @@ const STEP = 1024;
 
 type Access = { boardId: string; title: string; role: 'OWNER' | 'MEMBER' };
 
-/** Р”РѕСЃС‚СѓРї Рє РґРѕСЃРєРµ: СѓС‡Р°СЃС‚РЅРёРє РёР»Рё РІР»Р°РґРµР»РµС†; РёРЅР°С‡Рµ 404 (РЅРµ СЂР°СЃРєСЂС‹РІР°РµРј СЃСѓС‰РµСЃС‚РІРѕРІР°РЅРёРµ). */
+/** Доступ к доске: участник или владелец; иначе 404 (не раскрываем существование). */
 async function boardAccess(userId: string, boardId: string): Promise<Access> {
   const [row] = await db
     .select({ boardId: boards.id, title: boards.title, role: boardMembers.role })
@@ -34,26 +34,26 @@ async function boardAccess(userId: string, boardId: string): Promise<Access> {
     .innerJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, userId)))
     .where(eq(boards.id, boardId));
   if (!row) {
-    throw new HttpError(404, 'BOARD_NOT_FOUND', 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР° РёР»Рё РЅРµС‚ РґРѕСЃС‚СѓРїР°');
+    throw new HttpError(404, 'BOARD_NOT_FOUND', 'Доска не найдена или нет доступа');
   }
   return row;
 }
 
-/** Р”РѕСЃС‚СѓРї С‡РµСЂРµР· РєРѕР»РѕРЅРєСѓ (РґР»СЏ РєР°СЂС‚РѕС‡РµРє Рё РєРѕР»РѕРЅРѕРє РїРѕ РёС… id). */
+/** Доступ через колонку (для карточек и колонок по их id). */
 async function columnAccess(userId: string, columnId: string): Promise<Access & { columnId: string }> {
   const [column] = await db.select().from(columns).where(eq(columns.id, columnId));
   if (!column) {
-    throw new HttpError(404, 'COLUMN_NOT_FOUND', 'РљРѕР»РѕРЅРєР° РЅРµ РЅР°Р№РґРµРЅР°');
+    throw new HttpError(404, 'COLUMN_NOT_FOUND', 'Колонка не найдена');
   }
   const access = await boardAccess(userId, column.boardId);
   return { ...access, columnId: column.id };
 }
 
-/** Р”РѕСЃС‚СѓРї С‡РµСЂРµР· РєР°СЂС‚РѕС‡РєСѓ. */
+/** Доступ через карточку. */
 async function cardAccess(userId: string, cardId: string): Promise<Access & { columnId: string }> {
   const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
   if (!card) {
-    throw new HttpError(404, 'CARD_NOT_FOUND', 'РљР°СЂС‚РѕС‡РєР° РЅРµ РЅР°Р№РґРµРЅР°');
+    throw new HttpError(404, 'CARD_NOT_FOUND', 'Карточка не найдена');
   }
   const access = await columnAccess(userId, card.columnId);
   return access;
@@ -86,7 +86,7 @@ function cardDto(card: typeof cards.$inferSelect): CardDto {
   };
 }
 
-/** РЎР»РµРґСѓСЋС‰Р°СЏ РїРѕР·РёС†РёСЏ РІ РєРѕРЅС†Рµ СЃРїРёСЃРєР° (FR-6: РІСЃС‚Р°РІРєР° РІ РєРѕРЅРµС† = last + STEP). */
+/** Следующая позиция в конце списка (FR-6: вставка в конец = last + STEP). */
 async function nextColumnPosition(boardId: string): Promise<number> {
   const [row] = await db.select({ maxPos: max(columns.position) }).from(columns).where(eq(columns.boardId, boardId));
   return (row?.maxPos ?? 0) + STEP;
@@ -97,11 +97,11 @@ async function nextCardPosition(columnId: string): Promise<number> {
   return (row?.maxPos ?? 0) + STEP;
 }
 
-/** РџРѕР»РЅС‹Р№ СЃРЅР°РїС€РѕС‚ РґРѕСЃРєРё (FR-9: С‚РѕС‚ Р¶Рµ С„РѕСЂРјР°С‚ Р±СѓРґРµС‚ Сѓ WS board:state). */
-export async function boardSnapshot(boardId: string, role: Access['role']): Promise<BoardSnapshot> {
+/** Полный снапшот доски (FR-9: тот же формат будет у WS board:state). */
+export async function snapshot(boardId: string, role: Access['role']): Promise<BoardSnapshot> {
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
   if (!board) {
-    throw new HttpError(404, 'BOARD_NOT_FOUND', 'Р”РѕСЃРєР° РЅРµ РЅР°Р№РґРµРЅР°');
+    throw new HttpError(404, 'BOARD_NOT_FOUND', 'Доска не найдена');
   }
   const columnRows = await db
     .select()
@@ -132,7 +132,7 @@ export async function boardSnapshot(boardId: string, role: Access['role']): Prom
   };
 }
 
-// --- Р”РѕСЃРєРё ---
+// --- Доски ---
 
 const listBoards: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
@@ -167,31 +167,31 @@ const createBoard: RequestHandler<{ id: string }> = async (req, res) => {
 const getBoard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
   const access = await boardAccess(userId, req.params.id);
-  res.json(await boardSnapshot(access.boardId, access.role));
+  res.json(await snapshot(access.boardId, access.role));
 };
 
 const renameBoard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
   const access = await boardAccess(userId, req.params.id);
   if (access.role !== 'OWNER') {
-    throw new HttpError(403, 'FORBIDDEN', 'РџРµСЂРµРёРјРµРЅРѕРІС‹РІР°С‚СЊ РґРѕСЃРєСѓ РјРѕР¶РµС‚ С‚РѕР»СЊРєРѕ РІР»Р°РґРµР»РµС†');
+    throw new HttpError(403, 'FORBIDDEN', 'Переименовывать доску может только владелец');
   }
   const { title } = renameBoardSchema.parse(req.body);
   await db.update(boards).set({ title }).where(eq(boards.id, access.boardId));
-  res.json(await boardSnapshot(access.boardId, access.role));
+  res.json(await snapshot(access.boardId, access.role));
 };
 
 const deleteBoard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
   const access = await boardAccess(userId, req.params.id);
   if (access.role !== 'OWNER') {
-    throw new HttpError(403, 'FORBIDDEN', 'РЈРґР°Р»СЏС‚СЊ РґРѕСЃРєСѓ РјРѕР¶РµС‚ С‚РѕР»СЊРєРѕ РІР»Р°РґРµР»РµС†');
+    throw new HttpError(403, 'FORBIDDEN', 'Удалять доску может только владелец');
   }
   await db.delete(boards).where(eq(boards.id, access.boardId));
   res.json({ ok: true });
 };
 
-// --- РљРѕР»РѕРЅРєРё ---
+// --- Колонки ---
 
 const createColumn: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
@@ -221,7 +221,7 @@ const deleteColumn: RequestHandler<{ id: string }> = async (req, res) => {
   res.json({ ok: true });
 };
 
-// --- РљР°СЂС‚РѕС‡РєРё ---
+// --- Карточки ---
 
 const createCard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);

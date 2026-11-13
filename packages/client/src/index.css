@@ -255,6 +255,19 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 0.3rem;
+}
+
+.drag-handle {
+  cursor: grab;
+  color: #6b778c;
+  font-size: 1rem;
+  padding: 0 0.15rem;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .column-header h2 {
