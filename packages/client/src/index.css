@@ -272,6 +272,17 @@ button:disabled {
 
 /* --- DragOverlay --- */
 
+.overlay-card,
+.overlay-column {
+  /* курсор/расчёты попадают в реальную разметку, а не в «летящую» копию */
+  pointer-events: none;
+}
+
+/* Обёртка DragOverlay (ставится порталом в body) не должна перехватывать hit-test */
+.drag-overlay {
+  pointer-events: none;
+}
+
 .overlay-card {
   box-shadow: 0 8px 24px rgb(0 0 0 / 30%);
   rotate: 2deg;
@@ -281,6 +292,13 @@ button:disabled {
   box-shadow: 0 12px 32px rgb(0 0 0 / 30%);
   rotate: 1deg;
   opacity: 0.95;
+}
+
+/* Место колонки, которая «переезжает» (сама колонка летит в DragOverlay) */
+.dragging-column {
+  opacity: 0.4;
+  outline: 2px dashed #0c66e4;
+  outline-offset: -2px;
 }
 
 .column-header h2 {
@@ -376,13 +394,19 @@ button:disabled {
 }
 
 .modal input,
-.modal textarea {
+.modal textarea,
+.modal select {
   font: inherit;
   font-weight: 400;
   padding: 0.5rem 0.6rem;
   border: 2px solid #dcdfe4;
   border-radius: 6px;
   resize: vertical;
+}
+
+.modal select {
+  resize: none;
+  background: #fff;
 }
 
 .editing-badge {

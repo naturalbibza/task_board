@@ -7,15 +7,15 @@ import {
   PointerSensor,
   closestCorners,
   pointerWithin,
+  useDraggable,
+  useDroppable,
   useSensor,
   useSensors,
   type CollisionDetection,
-  type DragEndEvent,
-  type DragOverEvent,
+  type DragMoveEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import type { BoardSnapshot, CardDto, ColumnDto, PresenceUser, UserDto } from '@task-board/shared';
 import * as boardsApi from '../api/boards';
 import { getSocket } from '../api/socket';
@@ -32,6 +32,88 @@ function mergeById<T extends { id: string }>(prev: T[], updated: T[]): T[] {
   return [...map.values()];
 }
 
+/**
+ * Соседи по индексу в упорядоченном списке без перемещаемого элемента (FR-6).
+ * Контракт сервера (services/positions.ts): afterId — «встать сразу после него»,
+ * beforeId — «встать сразу перед ним». Позиция = среднее между соседями.
+ */
+function insertion<T extends { id: string; position: number }>(
+  list: T[],
+  index: number,
+): { beforeId: string | null; afterId: string | null; position: number } {
+  const before = list[index - 1]?.position ?? 0;
+  const after = list[index]?.position ?? before + STEP;
+  return {
+    beforeId: list[index]?.id ?? null,
+    afterId: list[index - 1]?.id ?? null,
+    position: (before + after) / 2,
+  };
+}
+
+function sameOrder(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((id, i) => id === b[i]);
+}
+
+interface RectLike {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Куда встанет карточка: колонка под центром перетаскиваемой карточки + индекс
+ * по центрам карточек этой колонки (сама карточка не учитывается).
+ * Геометрия, а не dnd-kit-коллизии: превью и дроп считаются одинаково, поэтому
+ * место, куда пользователь отпустил, всегда совпадает с сохранённым.
+ */
+function resolveCardDrop(rect: RectLike, cardId: string): { columnId: string; index: number } | null {
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const column = document.elementFromPoint(cx, cy)?.closest<HTMLElement>('[data-column-id]') ?? null;
+  const columnId = column?.dataset.columnId;
+  if (!column || !columnId) return null;
+
+  const cards = [...column.querySelectorAll<HTMLElement>('[data-card-id]')].filter(
+    (el) => el.dataset.cardId !== cardId,
+  );
+  let index = cards.length;
+  for (let i = 0; i < cards.length; i += 1) {
+    const box = cards[i].getBoundingClientRect();
+    if (cy < box.top + box.height / 2) {
+      index = i;
+      break;
+    }
+  }
+  return { columnId, index };
+}
+
+/** Индекс колонки по центру перетаскиваемой колонки (горизонтальное сравнение). */
+function resolveColumnDrop(rect: RectLike, columnId: string): { index: number } | null {
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const el = document.elementFromPoint(cx, cy);
+  if (!el?.closest('.columns')) return null;
+
+  const columns = [...document.querySelectorAll<HTMLElement>('.columns > [data-column-id]')].filter(
+    (node) => node.dataset.columnId !== columnId,
+  );
+  let index = columns.length;
+  for (let i = 0; i < columns.length; i += 1) {
+    const box = columns[i].getBoundingClientRect();
+    if (cx < box.left + box.width / 2) {
+      index = i;
+      break;
+    }
+  }
+  return { index };
+}
+
+type DragState =
+  | { type: 'card'; card: CardDto; originalIndex: number }
+  | { type: 'column'; column: ColumnDto; originalIndex: number }
+  | null;
+
 export function BoardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -42,224 +124,177 @@ export function BoardPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
 
+  // Перетаскивание: DragOverlay следует за курсором, а «тень»-заглушка живёт
+  // в разметке на том месте, куда карточка/колонка встанет после дропа.
+  const [activeDrag, setActiveDrag] = useState<DragState>(null);
+  const [cardPreview, setCardPreview] = useState<{ columnId: string; index: number } | null>(null);
+  const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
+  const cardPreviewRef = useRef<{ columnId: string; index: number } | null>(null);
+  const columnOrderRef = useRef<string[] | null>(null);
+
+  const noticeTimer = useRef<number | null>(null);
+  const showNotice = useCallback((message: string) => {
+    setNotice(message);
+    if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 3000);
+  }, []);
+  useEffect(
+    () => () => {
+      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
+    },
+    [],
+  );
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // DragOverlay: перетаскиваемая карточка следует за курсором везде,
-  // на её месте остаётся заглушка; возврат — только при дропе вне колонок.
-  const [activeDrag, setActiveDrag] = useState<{
-    type: 'card' | 'column';
-    card?: CardDto;
-    column?: ColumnDto;
-    originalCard?: CardDto;
-  } | null>(null);
-  const lastMoveRef = useRef<{ cardId: string; toColumnId: string; beforeId: string | null; afterId: string | null; position: number } | null>(
-    null,
+  const columns = useMemo(
+    () => (snapshot ? [...snapshot.columns].sort((a, b) => a.position - b.position) : []),
+    [snapshot],
   );
 
+  // Базовый порядок карточек по колонкам (без превью) — источник правды для дропа.
+  const cardsByColumnBase = useMemo(() => {
+    const map = new Map<string, CardDto[]>();
+    for (const column of columns) map.set(column.id, []);
+    for (const card of snapshot?.cards ?? []) map.get(card.columnId)?.push(card);
+    for (const list of map.values()) list.sort((a, b) => a.position - b.position);
+    return map;
+  }, [columns, snapshot]);
+
+  const setCardPreviewState = useCallback((next: { columnId: string; index: number } | null) => {
+    cardPreviewRef.current = next;
+    setCardPreview(next);
+  }, []);
+
+  const setColumnOrderState = useCallback((next: string[] | null) => {
+    columnOrderRef.current = next;
+    setColumnOrder(next);
+  }, []);
+
+  const clearDrag = useCallback(() => {
+    setActiveDrag(null);
+    setCardPreviewState(null);
+    setColumnOrderState(null);
+  }, [setCardPreviewState, setColumnOrderState]);
+
   const onDragStart = (event: DragStartEvent) => {
-    console.log('[dnd] start', String(event.active.id), event.active.data.current?.type);
-    lastMoveRef.current = null;
+    setCardPreviewState(null);
+    setColumnOrderState(null);
     const type = event.active.data.current?.type as 'card' | 'column' | undefined;
+
     if (type === 'card') {
       const card = snapshot?.cards.find((c) => c.id === event.active.id);
-      setActiveDrag(card ? { type: 'card', card, originalCard: card } : null);
+      if (!card) return;
+      const originalIndex = (cardsByColumnBase.get(card.columnId) ?? []).findIndex((c) => c.id === card.id);
+      setActiveDrag({ type: 'card', card, originalIndex });
     } else if (type === 'column') {
-      const column = snapshot?.columns.find((c) => c.id === event.active.id);
-      setActiveDrag(column ? { type: 'column', column } : null);
+      const column = columns.find((c) => c.id === event.active.id);
+      if (!column) return;
+      setActiveDrag({ type: 'column', column, originalIndex: columns.findIndex((c) => c.id === column.id) });
+      setColumnOrderState(columns.map((c) => c.id));
     }
   };
 
-  const clearDrag = () => {
-    setActiveDrag(null);
-    lastMoveRef.current = null;
-  };
+  const onDragMove = (event: DragMoveEvent) => {
+    const rect = event.active.rect.current.translated;
+    if (!rect || !activeDrag) return;
 
-  const onDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over || !snapshot) return;
-    if (active.data.current?.type !== 'card') return;
-    const cardId = String(active.id);
-    const card = snapshot.cards.find((c) => c.id === cardId);
-    if (!card) return;
-    const overType = over.data.current?.type as 'card' | 'column' | undefined;
-
-    let targetColumnId: string | null = null;
-    let index: number | null = null;
-    if (overType === 'card') {
-      const overCard = snapshot.cards.find((c) => c.id === over.id);
-      if (!overCard || overCard.id === cardId) return;
-      targetColumnId = overCard.columnId;
-      const list = snapshot.cards
-        .filter((c) => c.columnId === targetColumnId && c.id !== cardId)
-        .sort((a, b) => a.position - b.position);
-      const i = list.findIndex((c) => c.id === over.id);
-      index = i === -1 ? list.length : i;
-    } else if (overType === 'column') {
-      targetColumnId = String(over.id);
-      if (card.columnId !== targetColumnId) index = snapshot.cards.filter((c) => c.columnId === targetColumnId).length;
+    if (activeDrag.type === 'card') {
+      const target = resolveCardDrop(rect, activeDrag.card.id);
+      if (!target) {
+        if (cardPreviewRef.current) setCardPreviewState(null);
+        return;
+      }
+      const current = cardPreviewRef.current;
+      if (current && current.columnId === target.columnId && current.index === target.index) return;
+      setCardPreviewState(target);
+      return;
     }
-    if (!targetColumnId || card.columnId === targetColumnId) return;
 
-    const list = snapshot.cards
-      .filter((c) => c.columnId === targetColumnId && c.id !== cardId)
-      .sort((a, b) => a.position - b.position);
-    const ins = insertion(list, index ?? list.length);
-    optimisticMoveCard(cardId, targetColumnId, ins.position);
-    lastMoveRef.current = { cardId, toColumnId: targetColumnId, beforeId: ins.beforeId, afterId: ins.afterId, position: ins.position };
-    console.log('[dnd] over moved', cardId, '->', targetColumnId, 'pos', ins.position);
+    const target = resolveColumnDrop(rect, activeDrag.column.id);
+    if (!target) {
+      if (columnOrderRef.current) setColumnOrderState(null);
+      return;
+    }
+    const base = (columnOrderRef.current ?? columns.map((c) => c.id)).filter((cid) => cid !== activeDrag.column.id);
+    const index = Math.max(0, Math.min(target.index, base.length));
+    const next = [...base.slice(0, index), activeDrag.column.id, ...base.slice(index)];
+    if (columnOrderRef.current && sameOrder(columnOrderRef.current, next)) return;
+    setColumnOrderState(next);
   };
 
-  /** Расчёт соседей и позиции после вставки в упорядоченный список. */
-  const insertion = <T extends { id: string; position: number }>(
-    list: T[],
-    index: number,
-  ): { beforeId: string | null; afterId: string | null; position: number } => {
-    const before = list[index - 1]?.position ?? 0;
-    const after = list[index]?.position ?? before + STEP;
-    return {
-      beforeId: list[index - 1]?.id ?? null,
-      afterId: list[index]?.id ?? null,
-      position: (before + after) / 2,
-    };
-  };
-
-  const optimisticMoveCard = (cardId: string, toColumnId: string, position: number) => {
-    setSnapshot((prev) =>
-      prev && {
-        ...prev,
-        cards: prev.cards.map((c) => (c.id === cardId ? { ...c, columnId: toColumnId, position } : c)),
-      },
-    );
-  };
-
-  // Коллизия: приоритет — droppable под курсором (колонка/карточка), иначе ближайшие углы.
-  // closestCorners один промахивался: дроп над пустой колонкой резолвился в карточку соседней.
+  // Коллизия: приоритет — droppable под курсором, иначе ближайшие углы (для over/отмены).
   const collisionDetection: CollisionDetection = (args) => {
     const pointer = pointerWithin(args);
     return pointer.length > 0 ? pointer : closestCorners(args);
   };
 
-  const onDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    console.log('[dnd] end', String(active.id), 'over=', over ? String(over.id) : 'null', 'overType=', over?.data.current?.type, 'lastMove=', Boolean(lastMoveRef.current));
-
-    // Дроп вне колонок: вернуть карточку в исходную (FR-7, как в Trello)
-    if (!over) {
-      const original = activeDrag?.originalCard;
-      if (original) {
-        setSnapshot((prev) => prev && ({ ...prev, cards: prev.cards.map((c) => (c.id === original.id ? original : c)) }));
-        // Пользователю важно понимать, что это штатная отмена, а не сбой
-        setNotice('Перетаскивание отменено — отпустите карточку над колонкой');
-        setTimeout(() => setNotice(null), 3000);
-      }
+  const onDragEnd = () => {
+    const drag = activeDrag;
+    if (!drag) {
+      clearDrag();
       return;
     }
-    // Дроп на «тень» (сама карточка): применяем последнее намерение из onDragOver.
-    // Самый частый путь реального пользователя — отпускание над слотом-призраком.
-    if (active.data.current?.type === 'card' && String(active.id) === String(over.id)) {
-      const last = lastMoveRef.current;
-      if (last && last.toColumnId !== activeDrag?.originalCard?.columnId) {
-        optimisticMoveCard(last.cardId, last.toColumnId, last.position);
-        getSocket().emit('card:move', {
-          id: last.cardId,
-          toColumnId: last.toColumnId,
-          beforeId: last.beforeId,
-          afterId: last.afterId,
-        });
-      } else if (activeDrag?.originalCard) {
-        setSnapshot(
-          (prev) =>
-            prev && ({
-              ...prev,
-              cards: prev.cards.map((c) => (c.id === activeDrag.originalCard!.id ? activeDrag.originalCard! : c)),
-            }),
-        );
+
+    if (drag.type === 'card') {
+      // Источник истины — последнее превью: «тень» стоит именно там, куда упадёт карточка.
+      const target = cardPreviewRef.current;
+      setCardPreviewState(null);
+      if (!target) {
+        // Дроп вне колонок: карточка осталась на прежнем месте (FR-7, как в Trello)
+        showNotice('Перетаскивание отменено — отпустите карточку над колонкой');
+        return;
       }
-      return;
-    }
-    if (!snapshot || String(active.id) === String(over.id)) return;
-    const activeType = active.data.current?.type as 'card' | 'column' | undefined;
+      if (target.columnId === drag.card.columnId && target.index === drag.originalIndex) return;
 
-    if (activeType === 'card') {
-      const card = snapshot.cards.find((c) => c.id === active.id);
-      if (!card) return;
-      const overType = over.data.current?.type as 'card' | 'column' | undefined;
-
-      let targetColumnId: string;
-      let list: CardDto[];
-      if (overType === 'card') {
-        const overCard = snapshot.cards.find((c) => c.id === over.id);
-        if (!overCard) return;
-        targetColumnId = overCard.columnId;
-        list = snapshot.cards
-          .filter((c) => c.columnId === targetColumnId && c.id !== card.id)
-          .sort((a, b) => a.position - b.position);
-        const overIndex = list.findIndex((c) => c.id === over.id);
-        if (overIndex === -1) return;
-        // в той же колонке «ниже» over — вставляем после него
-        const sameColumn = card.columnId === targetColumnId;
-        let insertIndex = overIndex;
-        if (sameColumn) {
-          const currentList = snapshot.cards
-            .filter((c) => c.columnId === targetColumnId)
-            .sort((a, b) => a.position - b.position);
-          const activeIndex = currentList.findIndex((c) => c.id === card.id);
-          if (activeIndex > overIndex) insertIndex = overIndex + 1;
-        }
-        const ins = insertion(list, insertIndex);
-        optimisticMoveCard(card.id, targetColumnId, ins.position);
-        getSocket().emit('card:move', {
-          id: card.id,
-          toColumnId: targetColumnId,
-          beforeId: ins.beforeId,
-          afterId: ins.afterId,
-        });
-      } else if (overType === 'column') {
-        targetColumnId = String(over.id);
-        list = snapshot.cards
-          .filter((c) => c.columnId === targetColumnId && c.id !== card.id)
-          .sort((a, b) => a.position - b.position);
-        const ins = insertion(list, list.length);
-        optimisticMoveCard(card.id, targetColumnId, ins.position);
-        getSocket().emit('card:move', {
-          id: card.id,
-          toColumnId: targetColumnId,
-          beforeId: ins.beforeId,
-          afterId: ins.afterId,
-        });
-      } else return;
-    } else if (activeType === 'column') {
-      const columnId = String(active.id);
-      // over — другая колонка или карточка внутри неё
-      const overColumnId =
-        over.data.current?.type === 'card'
-          ? (snapshot.cards.find((c) => c.id === over.id)?.columnId ?? '')
-          : String(over.id);
-      if (!overColumnId || overColumnId === columnId) return;
-      const list = columns.filter((c) => c.id !== columnId);
-      const overIndex = list.findIndex((c) => c.id === overColumnId);
-      if (overIndex === -1) return;
-      // в той же линии «правее» over — вставляем после
-      const currentList = [...columns];
-      const activeIndex = currentList.findIndex((c) => c.id === columnId);
-      let insertIndex = overIndex;
-      if (activeIndex > overIndex) insertIndex = overIndex + 1;
-      const ins = insertion(list, insertIndex);
-      setSnapshot((prev) =>
-        prev && {
-          ...prev,
-          columns: prev.columns.map((c) => (c.id === columnId ? { ...c, position: ins.position } : c)),
-        },
+      const list = cardsByColumnBase.get(target.columnId)?.filter((c) => c.id !== drag.card.id) ?? [];
+      const ins = insertion(list, Math.min(target.index, list.length));
+      // optimistic: карточка сразу на новом месте, серверный broadcast сверяет (FR-11)
+      setSnapshot(
+        (prev) =>
+          prev && {
+            ...prev,
+            cards: prev.cards.map((c) =>
+              c.id === drag.card.id ? { ...c, columnId: target.columnId, position: ins.position } : c,
+            ),
+          },
       );
-      getSocket().emit('column:move', {
-        id: columnId,
+      getSocket().emit('card:move', {
+        id: drag.card.id,
+        toColumnId: target.columnId,
         beforeId: ins.beforeId,
         afterId: ins.afterId,
       });
+      return;
     }
+
+    // Колонки: порядок из превью, а не пересчёт по «уехавшему» макету.
+    const preview = columnOrderRef.current;
+    setColumnOrderState(null);
+    if (!preview) {
+      showNotice('Перемещение колонки отменено');
+      return;
+    }
+    const index = preview.indexOf(drag.column.id);
+    if (index === -1 || index === drag.originalIndex) return;
+
+    const list = columns.filter((c) => c.id !== drag.column.id);
+    const ins = insertion(list, Math.min(index, list.length));
+    setSnapshot(
+      (prev) =>
+        prev && {
+          ...prev,
+          columns: prev.columns.map((c) => (c.id === drag.column.id ? { ...c, position: ins.position } : c)),
+        },
+    );
+    getSocket().emit('column:move', {
+      id: drag.column.id,
+      beforeId: ins.beforeId,
+      afterId: ins.afterId,
+    });
   };
 
   // WS: снапшот, presence и события мутаций (FR-9, FR-13, FR-14, фаза 8)
@@ -369,6 +404,9 @@ export function BoardPage() {
       createCard: (columnId: string, title: string) => socket.emit('card:create', { columnId, title }),
       updateCard: (cardId: string, patch: { title?: string; description?: string | null }) =>
         socket.emit('card:update', { id: cardId, ...patch }),
+      // Перемещение из модалки карточки (мобильный сценарий): в конец целевой колонки
+      moveCardToEnd: (cardId: string, toColumnId: string) =>
+        socket.emit('card:move', { id: cardId, toColumnId, beforeId: null, afterId: null }),
       deleteCard: (cardId: string) => socket.emit('card:delete', { id: cardId }),
       editingStart: (cardId: string) => socket.emit('card:editing-start', { cardId }),
       editingStop: (cardId: string) => socket.emit('card:editing-stop', { cardId }),
@@ -390,10 +428,28 @@ export function BoardPage() {
     if (error) void reload();
   }, [error, reload]);
 
-  const columns = useMemo(
-    () => (snapshot ? [...snapshot.columns].sort((a, b) => a.position - b.position) : []),
-    [snapshot],
-  );
+  // Порядок колонок с учётом превью перетаскивания (без изменения данных до дропа).
+  const displayColumns = useMemo(() => {
+    if (!columnOrder) return columns;
+    const byId = new Map(columns.map((c) => [c.id, c]));
+    const ordered = columnOrder.map((cid) => byId.get(cid)).filter((c): c is ColumnDto => Boolean(c));
+    return ordered.length === columns.length ? ordered : columns;
+  }, [columns, columnOrder]);
+
+  // Карточки по колонкам с превью: «тень» уже стоит на будущем месте.
+  const cardsByColumn = useMemo(() => {
+    if (!activeDrag || activeDrag.type !== 'card' || !cardPreview) return cardsByColumnBase;
+    const next = new Map(cardsByColumnBase);
+    const card = activeDrag.card;
+    const source = next.get(card.columnId);
+    if (source) next.set(card.columnId, source.filter((c) => c.id !== card.id));
+    const target = [...(next.get(cardPreview.columnId) ?? [])];
+    target.splice(Math.min(cardPreview.index, target.length), 0, card);
+    next.set(cardPreview.columnId, target);
+    return next;
+  }, [cardsByColumnBase, activeDrag, cardPreview]);
+
+  const dragCardId = activeDrag?.type === 'card' ? activeDrag.card.id : null;
 
   if (error) {
     return (
@@ -434,38 +490,36 @@ export function BoardPage() {
         sensors={sensors}
         collisionDetection={collisionDetection}
         onDragStart={onDragStart}
-        onDragOver={onDragOver}
-        onDragEnd={(event) => {
-          onDragEnd(event);
+        onDragMove={onDragMove}
+        onDragEnd={() => {
+          onDragEnd();
           clearDrag();
         }}
         onDragCancel={clearDrag}
       >
-        <SortableContext items={columns.map((c) => c.id)}>
-          <div className="columns">
-            {columns.map((column) => (
-              <ColumnView
-                key={column.id}
-                column={column}
-                cards={snapshot.cards
-                  .filter((c) => c.columnId === column.id)
-                  .sort((a, b) => a.position - b.position)}
-                ws={ws}
-                reload={reload}
-                onError={setError}
-                editingByCard={editingByCard}
-                members={snapshot.members}
-              />
-            ))}
-            <NewColumnForm
-              onCreate={(title) => {
-                ws.createColumn(title);
-              }}
+        <div className="columns">
+          {displayColumns.map((column) => (
+            <ColumnView
+              key={column.id}
+              column={column}
+              cards={cardsByColumn.get(column.id) ?? []}
+              activeCardId={dragCardId}
+              columns={columns}
+              ws={ws}
+              onError={setError}
+              onNotice={showNotice}
+              editingByCard={editingByCard}
+              members={snapshot.members}
             />
-          </div>
-        </SortableContext>
+          ))}
+          <NewColumnForm
+            onCreate={(title) => {
+              ws.createColumn(title);
+            }}
+          />
+        </div>
 
-        <DragOverlay>
+        <DragOverlay className="drag-overlay">
           {activeDrag?.type === 'card' && activeDrag.card ? (
             <article className="card card-view overlay-card">{activeDrag.card.title}</article>
           ) : activeDrag?.type === 'column' && activeDrag.column ? (
@@ -475,21 +529,17 @@ export function BoardPage() {
                 <h2>{activeDrag.column.title}</h2>
               </header>
               <div className="column-cards">
-                {snapshot.cards
-                  .filter((c) => c.columnId === activeDrag.column!.id)
-                  .slice(0, 5)
-                  .map((c) => (
-                    <article key={c.id} className="card card-view">
-                      {c.title}
-                    </article>
-                  ))}
+                {(cardsByColumnBase.get(activeDrag.column.id) ?? []).slice(0, 5).map((c) => (
+                  <article key={c.id} className="card card-view">
+                    {c.title}
+                  </article>
+                ))}
               </div>
             </section>
           ) : null}
         </DragOverlay>
       </DndContext>
 
-      {error && <p className="error">{error}</p>}
       {notice && <div className="toast">{notice}</div>}
     </main>
   );
@@ -552,6 +602,7 @@ interface WsApi {
   deleteColumn: (columnId: string) => void;
   createCard: (columnId: string, title: string) => void;
   updateCard: (cardId: string, patch: { title?: string; description?: string | null }) => void;
+  moveCardToEnd: (cardId: string, toColumnId: string) => void;
   deleteCard: (cardId: string) => void;
   editingStart: (cardId: string) => void;
   editingStop: (cardId: string) => void;
@@ -560,18 +611,28 @@ interface WsApi {
 interface ColumnViewProps {
   column: ColumnDto;
   cards: CardDto[];
+  activeCardId: string | null;
+  columns: ColumnDto[];
   ws: WsApi;
-  reload: () => Promise<void>;
   onError: (message: string) => void;
+  onNotice: (message: string) => void;
   editingByCard: Record<string, string>;
   members: UserDto[];
 }
 
 function ColumnView(props: ColumnViewProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { setNodeRef: setDragRef, listeners, attributes, isDragging } = useDraggable({
     id: props.column.id,
     data: { type: 'column' },
   });
+  const { setNodeRef: setDropRef } = useDroppable({ id: props.column.id, data: { type: 'column' } });
+  const setNodeRef = useCallback(
+    (node: HTMLElement | null) => {
+      setDragRef(node);
+      setDropRef(node);
+    },
+    [setDragRef, setDropRef],
+  );
 
   const [newCardTitle, setNewCardTitle] = useState('');
   const [editingTitle, setEditingTitle] = useState(false);
@@ -601,8 +662,8 @@ function ColumnView(props: ColumnViewProps) {
   return (
     <section
       ref={setNodeRef}
-      className="column"
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.35 : 1 }}
+      className={`column${isDragging ? ' dragging-column' : ''}`}
+      data-column-id={props.column.id}
     >
       <header className="column-header">
         <span className="drag-handle" {...attributes} {...listeners}>
@@ -637,21 +698,27 @@ function ColumnView(props: ColumnViewProps) {
         </button>
       </header>
 
-      <SortableContext items={props.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-        <div className="column-cards">
-          {props.cards.map((card) => (
+      <div className="column-cards">
+        {props.cards.map((card) =>
+          card.id === props.activeCardId ? (
+            // «Тень»: место, куда карточка встанет после дропа
+            <article key={card.id} className="card card-view dragging-ghost" data-card-id={card.id}>
+              {card.title}
+            </article>
+          ) : (
             <CardView
               key={card.id}
               card={card}
               ws={props.ws}
-              reload={props.reload}
+              columns={props.columns}
               onError={props.onError}
+              onNotice={props.onNotice}
               editingBy={props.editingByCard[card.id] ?? null}
               members={props.members}
             />
-          ))}
-        </div>
-      </SortableContext>
+          ),
+        )}
+      </div>
 
       <form
         className="card-create"
@@ -674,21 +741,23 @@ function ColumnView(props: ColumnViewProps) {
 interface CardViewProps {
   card: CardDto;
   ws: WsApi;
-  reload: () => Promise<void>;
+  columns: ColumnDto[];
   onError: (message: string) => void;
+  onNotice: (message: string) => void;
   editingBy: string | null; // userId другого редактирующего
   members: UserDto[];
 }
 
 function CardView(props: CardViewProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+  const { attributes, listeners, setNodeRef } = useDraggable({
     id: props.card.id,
-    data: { type: 'card', columnId: props.card.columnId },
+    data: { type: 'card' },
   });
 
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(props.card.title);
   const [description, setDescription] = useState(props.card.description ?? '');
+  const [targetColumnId, setTargetColumnId] = useState(props.card.columnId);
 
   const editorName = props.editingBy
     ? (props.members.find((m) => m.id === props.editingBy)?.name ?? 'участник')
@@ -696,6 +765,9 @@ function CardView(props: CardViewProps) {
 
   const openModal = () => {
     setOpen(true);
+    setTitle(props.card.title);
+    setDescription(props.card.description ?? '');
+    setTargetColumnId(props.card.columnId);
     props.ws.editingStart(props.card.id);
   };
 
@@ -704,14 +776,14 @@ function CardView(props: CardViewProps) {
     props.ws.editingStop(props.card.id);
   };
 
-  const save = async () => {
-    try {
-      props.ws.updateCard(props.card.id, { title: title.trim(), description: description || null });
-      closeModal();
-      await props.reload();
-    } catch (err) {
-      props.onError(errorText(err));
+  const save = () => {
+    props.ws.updateCard(props.card.id, { title: title.trim(), description: description || null });
+    if (targetColumnId !== props.card.columnId) {
+      props.ws.moveCardToEnd(props.card.id, targetColumnId);
+      const columnTitle = props.columns.find((c) => c.id === targetColumnId)?.title;
+      props.onNotice(columnTitle ? `Карточка перемещена в «${columnTitle}»` : 'Карточка перемещена');
     }
+    closeModal();
   };
 
   const remove = async () => {
@@ -724,11 +796,8 @@ function CardView(props: CardViewProps) {
     <>
       <article
         ref={setNodeRef}
-        className={`card card-view${isDragging ? ' dragging-ghost' : ''}`}
-        style={{
-          transform: CSS.Transform.toString(transform),
-          transition,
-        }}
+        className="card card-view"
+        data-card-id={props.card.id}
         {...attributes}
         {...listeners}
         onClick={openModal}
@@ -753,13 +822,18 @@ function CardView(props: CardViewProps) {
                 maxLength={5000}
               />
             </label>
+            <label>
+              Колонка
+              <select value={targetColumnId} onChange={(e) => setTargetColumnId(e.target.value)}>
+                {props.columns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.title}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="modal-actions">
-              <button
-                type="button"
-                onClick={() => {
-                  void save();
-                }}
-              >
+              <button type="button" onClick={save}>
                 Сохранить
               </button>
               <button type="button" className="danger" onClick={remove}>
