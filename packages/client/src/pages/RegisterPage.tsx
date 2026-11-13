@@ -7,6 +7,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -16,6 +17,10 @@ export function RegisterPage() {
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (password !== confirmPassword) {
+      setError('Пароли не совпадают');
+      return;
+    }
     setBusy(true);
     try {
       await register({ email, password, name: name.trim() || undefined });
@@ -41,6 +46,15 @@ export function RegisterPage() {
         <label>
           Пароль <span className="optional">(минимум 8 символов)</span>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+        </label>
+        <label>
+          Повторите пароль
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            required
+          />
         </label>
         {error && <p className="error">{error}</p>}
         <button type="submit" disabled={busy}>
