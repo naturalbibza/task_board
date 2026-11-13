@@ -71,7 +71,7 @@
 - [x] 6.3 `board:join`: комната `board:<id>`, `board:state` — снапшот из БД (переиспользован REST-билдер `boardSnapshot`)
 - [x] 6.4 Клиент: socket-синглтон (`api/socket.ts`, same-origin через прокси), WS-снапшот заменил REST-загрузку экрана доски; REST-мутации пока перезагружают снапшот через GET (леса до фазы 8)
 - [x] 6.5 Presence: `presence:update` (дедупликация по userId) + компонент `MembersBar`
-- [x] 6.6 Проверка WSS через Caddy — пуш/прод-проверка отдельно, по явной команде
+- [x] 6.6 Проверка WSS через Caddy на проде — **программный WSS-тест 6/6** (register → REST-доска → WSS connect → `board:state` → `presence` → `ws:error`; reverse_proxy пробрасывает upgrade без доп. конфига)
 - **Чекпоинт:** две вкладки одного пользователя видят друг друга в MembersBar; F5 не ломает снапшот; чужая доска → `ws:error` (A7). — **пройден 2026-11-13**: e2e-скрипт WS 7/7 (join → state с 3 колонками, presence дедупликация двух вкладок, leave, чужая доска → `ws:error BOARD_NOT_FOUND`); браузер: MembersBar с «Демо», F5 восстанавливает доску.
 
 ## Фаза 7. Drag-n-drop (US-7, FR-6, FR-7)
