@@ -18,24 +18,37 @@ Socket.IO · PostgreSQL + Drizzle · zod · Docker Compose · GitHub Actions (CI
 - [`specs/001-task-board/plan.md`](specs/001-task-board/plan.md) — архитектура, модель данных, WS-протокол
 - [`specs/001-task-board/tasks.md`](specs/001-task-board/tasks.md) — фазы работ и чекпоинты
 
-## Запуск (локально)
+## Запуск с нуля
+
+Требования: Node.js ≥ 20 (вместе с npm), Git. Подключение к БД и Docker не нужны.
 
 ```bash
-pnpm install
-pnpm dev                  # без .env — сервер сам поднимет встроенный PostgreSQL (порт 54329)
+git clone https://github.com/naturalbibza/task_board.git
+cd task_board
+npm i -g pnpm             # менеджер пакетов (один раз)
+pnpm install              # зависимости + бинарники встроенного PostgreSQL (~60 МБ, один раз)
+pnpm dev                  # сервер (3001) + клиент (5174/5173)
 ```
 
-Ничего устанавливать и настраивать больше не нужно: без `DATABASE_URL` и `JWT_SECRET`
-сервер работает в автономном режиме (данные — в `packages/server/.localdb/`, в git не попадают).
-Бинарники встроенного PostgreSQL скачиваются один раз при `pnpm install`.
+Дальше откройте адрес клиента из вывода `pnpm dev` и зарегистрируйтесь.
+`.env` и Docker не нужны: без `DATABASE_URL` сервер сам поднимает встроенный
+PostgreSQL (порт 54329, данные в `packages/server/.localdb/`, в git не попадают),
+JWT-секрет генерируется автоматически. Интернет после `pnpm install` не требуется.
 
-Режим выбирается переменной `DB_MODE` в `packages/server/.env`:
-- не задана — авто (есть `DATABASE_URL` → внешняя БД, нет → офлайн);
-- `embedded` — всегда офлайн (удобно, когда Docker-база остановлена, а `.env` заполнен);
-- `external` — всегда внешняя БД.
+Полезные скрипты: `pnpm typecheck`, `pnpm lint`, `pnpm build`, `pnpm deploy:vps`.
 
-С внешней БД: скопируйте `.env.example` в `packages/server/.env` и заполните
-`DATABASE_URL`/`JWT_SECRET` (например, на локальный контейнер Postgres на порту 5433).
+## Выбор базы данных
+
+Задаётся переменной `USE_EXTERNAL_DB` в `packages/server/.env` (его нет — ничего не надо):
+
+| `USE_EXTERNAL_DB` | База | Когда удобно |
+|---|---|---|
+| не задана | авто: есть `DATABASE_URL` → внешняя, нет → встроенная | по умолчанию |
+| `0` | встроенный PostgreSQL (порт 54329, данные `.localdb/`) | ноутбук без Docker/сети; БД остановлена |
+| `1` | внешняя: обязательны `DATABASE_URL` и `JWT_SECRET` | Docker-база или прод; при отсутствии секретов — понятная ошибка при старте |
+
+Пример внешней БД: локальный контейнер `postgres:16` на порту 5433 —
+скопируйте `.env.example` в `packages/server/.env`, заполните и укажите `USE_EXTERNAL_DB=1`.
 
 Полный стек одним контейнером (если есть Docker): `docker compose up -d` — как на проде.
 

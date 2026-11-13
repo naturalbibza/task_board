@@ -19,17 +19,18 @@ const jwtFile = path.join(serverRoot, '.localdb.jwt'); // сгенерирова
 type DbMode = 'embedded' | 'external';
 
 /**
- * Режим БД: DB_MODE=embedded|external явно, иначе авто — external при заданном
- * DATABASE_URL, embedded в противном случае (NFR-10).
+ * Режим БД: USE_EXTERNAL_DB=1|0 явно, иначе авто — external при заданном
+ * DATABASE_URL, встроенная БД в противном случае (NFR-10).
  */
 function resolveDbMode(): DbMode {
-  const raw = process.env.DB_MODE?.toLowerCase();
-  if (raw === 'embedded' || raw === 'external') return raw;
+  const raw = process.env.USE_EXTERNAL_DB?.trim();
+  if (raw === '1') return 'external';
+  if (raw === '0') return 'embedded';
   return process.env.DATABASE_URL ? 'external' : 'embedded';
 }
 
 /**
- * Автономный режим (NFR-10): если DB_MODE=embedded, сервер сам поднимает
+ * Автономный режим (NFR-10): если работает встроенная БД, сервер сам поднимает
  * встроенный PostgreSQL (порт 54329, данные в .localdb) и генерирует
  * постоянный JWT-секрет. Прод всегда получает значения из compose.
  */
@@ -38,16 +39,16 @@ async function bootstrapLocal(): Promise<void> {
 
   if (mode === 'external') {
     if (!process.env.DATABASE_URL) {
-      throw new Error('DB_MODE=external, но DATABASE_URL не задан — задайте DATABASE_URL или уберите DB_MODE');
+      throw new Error('USE_EXTERNAL_DB=1, но DATABASE_URL не задан — задайте DATABASE_URL или уберите USE_EXTERNAL_DB');
     }
     if (!process.env.JWT_SECRET) {
-      throw new Error('DB_MODE=external, но JWT_SECRET не задан');
+      throw new Error('USE_EXTERNAL_DB=1, но JWT_SECRET не задан');
     }
     return;
   }
 
   if (process.env.DATABASE_URL) {
-    console.log('[db] DB_MODE=embedded — DATABASE_URL игнорируется, работаю со встроенным PostgreSQL');
+    console.log('[db] USE_EXTERNAL_DB=0 — DATABASE_URL игнорируется, работаю со встроенным PostgreSQL');
   }
 
   if (!process.env.JWT_SECRET) {
