@@ -79,7 +79,12 @@ const sockB = connect(cookieB);
 await Promise.all([once(sockA, 'connect'), once(sockB, 'connect')]);
 check('оба клиента подключены', sockA.connected && sockB.connected);
 
-const snapA = await joinBoard(sockA);
+let snapA = await joinBoard(sockA);
+if (!snapA) snapA = await joinBoard(sockA, 8000); // сеть могла моргнуть — одна повторная попытка
+if (!snapA) {
+  console.error(`Нет board:state от сервера (connected=${sockA.connected}, boardId=${boardId})`);
+  process.exit(1);
+}
 await joinBoard(sockB);
 const columns = snapA.columns;
 check('в доске есть колонки для сценариев', columns.length >= 2, `колонок: ${columns.length}`);
