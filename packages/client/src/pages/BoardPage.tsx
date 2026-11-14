@@ -123,6 +123,7 @@ export function BoardPage() {
   const [editingByCard, setEditingByCard] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [connected, setConnected] = useState(() => getSocket().connected);
   const [shareOpen, setShareOpen] = useState(false);
 
   // Перетаскивание: DragOverlay следует за курсором, а «тень»-заглушка живёт
@@ -132,6 +133,7 @@ export function BoardPage() {
   const [columnOrder, setColumnOrder] = useState<string[] | null>(null);
   const cardPreviewRef = useRef<{ columnId: string; index: number } | null>(null);
   const columnOrderRef = useRef<string[] | null>(null);
+  const wasOffline = useRef(false);
 
   const noticeTimer = useRef<number | null>(null);
   const showNotice = useCallback((message: string) => {
@@ -205,6 +207,8 @@ export function BoardPage() {
   const onDragMove = (event: DragMoveEvent) => {
     const rect = event.active.rect.current.translated;
     if (!rect || !activeDrag) return;
+    // Без связи мутацию не отправить: не показываем фантомный перенос
+    if (!getSocket().connected) return;
 
     if (activeDrag.type === 'card') {
       const target = resolveCardDrop(rect, activeDrag.card.id);
@@ -240,6 +244,12 @@ export function BoardPage() {
     const drag = activeDrag;
     if (!drag) {
       clearDrag();
+      return;
+    }
+    // Офлайн: подтвердить нечего — сервер мутацию не получит
+    if (!getSocket().connected) {
+      clearDrag();
+      showNotice('Нет соединения — изменение не сохранено');
       return;
     }
 
@@ -313,7 +323,15 @@ export function BoardPage() {
     const onPresence = (payload: { boardId: string; users: PresenceUser[] }) => {
       if (payload.boardId === id) setOnline(payload.users);
     };
-    const onWsError = (e: { code: string; message: string }) => setError(e.message);
+    const onWsError = (e: { code: string; message: string }) => {
+      // Ошибка конкретной мутации не должна убивать доску: тост + перечитывание
+      // снапшота (сервер авторитетен, клиент мог разойтись с ним).
+      showNotice(e.message);
+      void boardsApi
+        .getBoard(id)
+        .then(setSnapshot)
+        .catch(() => undefined);
+    };
     const onCardMoved = (payload: { cards: CardDto[] }) =>
       setSnapshot((prev) => prev && { ...prev, cards: mergeById(prev.cards, payload.cards) });
     const onColumnMoved = (payload: { columns: ColumnDto[] }) =>
@@ -364,18 +382,32 @@ export function BoardPage() {
     // Переподключение (потеря сети, bfcache, рестарт сервера): заново вступаем
     // в комнату доски — иначе события мутаций не доходят, а emits теряются.
     const join = () => socket.emit('board:join', { boardId: id });
-    const onConnect = () => join();
+    const onConnect = () => {
+      setConnected(true);
+      if (wasOffline.current) {
+        wasOffline.current = false;
+        showNotice('Связь восстановлена');
+      }
+      join();
+    };
+    const onDisconnect = () => {
+      wasOffline.current = true;
+      setConnected(false);
+    };
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted && !socket.connected) socket.connect();
       if (socket.connected) join();
     };
     socket.on('connect', onConnect);
+    socket.on('disconnect', onDisconnect);
     window.addEventListener('pageshow', onPageShow);
+    setConnected(socket.connected);
     if (socket.connected) join();
 
     return () => {
       if (socket.connected) socket.emit('board:leave', { boardId: id });
       socket.off('connect', onConnect);
+      socket.off('disconnect', onDisconnect);
       window.removeEventListener('pageshow', onPageShow);
       socket.off('board:state', onState);
       socket.off('presence:update', onPresence);
@@ -391,31 +423,60 @@ export function BoardPage() {
       socket.off('board:updated', onBoardUpdated);
       socket.off('presence:editing', onEditing);
     };
-  }, [id]);
+  }, [id, showNotice]);
 
   // WS-мутации (FR-8, фаза 8): optimistic не нужен — событие от сервера
   // перезаписывает состояние (reconciliation, конституция №3)
   const ws = useMemo(() => {
     const socket = getSocket();
     const boardId = id;
+    // Офлайн-мутации не буферизуем: socket.io иначе отправит устаревший intent
+    // после реконнекта. Честнее сказать «не сохранено» и не менять UI.
+    const guard = () => {
+      if (socket.connected) return true;
+      showNotice('Нет соединения — изменение не сохранено');
+      return false;
+    };
     return {
       createColumn: (title: string) => {
-        if (!boardId) return;
+        if (!boardId || !guard()) return;
         socket.emit('column:create', { boardId, title });
       },
-      renameColumn: (columnId: string, title: string) => socket.emit('column:rename', { id: columnId, title }),
-      deleteColumn: (columnId: string) => socket.emit('column:delete', { id: columnId }),
-      createCard: (columnId: string, title: string) => socket.emit('card:create', { columnId, title }),
-      updateCard: (cardId: string, patch: { title?: string; description?: string | null }) =>
-        socket.emit('card:update', { id: cardId, ...patch }),
+      renameColumn: (columnId: string, title: string) => {
+        if (!guard()) return;
+        socket.emit('column:rename', { id: columnId, title });
+      },
+      deleteColumn: (columnId: string) => {
+        if (!guard()) return;
+        socket.emit('column:delete', { id: columnId });
+      },
+      createCard: (columnId: string, title: string) => {
+        if (!guard()) return;
+        socket.emit('card:create', { columnId, title });
+      },
+      updateCard: (cardId: string, patch: { title?: string; description?: string | null }) => {
+        if (!guard()) return;
+        socket.emit('card:update', { id: cardId, ...patch });
+      },
       // Перемещение из модалки карточки (мобильный сценарий): в конец целевой колонки
-      moveCardToEnd: (cardId: string, toColumnId: string) =>
-        socket.emit('card:move', { id: cardId, toColumnId, beforeId: null, afterId: null }),
-      deleteCard: (cardId: string) => socket.emit('card:delete', { id: cardId }),
-      editingStart: (cardId: string) => socket.emit('card:editing-start', { cardId }),
-      editingStop: (cardId: string) => socket.emit('card:editing-stop', { cardId }),
+      moveCardToEnd: (cardId: string, toColumnId: string) => {
+        if (!guard()) return;
+        socket.emit('card:move', { id: cardId, toColumnId, beforeId: null, afterId: null });
+      },
+      deleteCard: (cardId: string) => {
+        if (!guard()) return;
+        socket.emit('card:delete', { id: cardId });
+      },
+      editingStart: (cardId: string) => {
+        if (!guard()) return;
+        socket.emit('card:editing-start', { cardId });
+      },
+      editingStop: (cardId: string) => {
+        if (!guard()) return;
+        socket.emit('card:editing-stop', { cardId });
+      },
     };
-  }, [id]);
+  }, [id, showNotice]);
 
   const reload = useCallback(async () => {
     if (!id) return;
@@ -465,7 +526,20 @@ export function BoardPage() {
       </main>
     );
   }
-  if (!snapshot) return <main className="page">Загрузка…</main>;
+  if (!snapshot) {
+    return (
+      <main className="board-page" aria-busy="true">
+        <div className="board-skeleton">
+          <div className="skeleton skeleton-bar" />
+          <div className="skeleton-row">
+            <div className="skeleton skeleton-column" />
+            <div className="skeleton skeleton-column" />
+            <div className="skeleton skeleton-column" />
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="board-page">
@@ -480,6 +554,12 @@ export function BoardPage() {
           onError={setError}
         />
         <MembersBar online={online} members={snapshot.members} />
+        <span
+          className={`conn ${connected ? 'conn-ok' : 'conn-down'}`}
+          title={connected ? 'Соединение с сервером активно' : 'Нет связи: изменения не сохраняются'}
+        >
+          {connected ? 'онлайн' : 'нет связи'}
+        </span>
         {snapshot.board.role === 'OWNER' && (
           <button type="button" onClick={() => setShareOpen(true)}>
             Поделиться
@@ -502,6 +582,9 @@ export function BoardPage() {
         onDragCancel={clearDrag}
       >
         <div className="columns">
+          {displayColumns.length === 0 && (
+            <p className="board-empty">Колонок пока нет. Создайте первую — справа.</p>
+          )}
           {displayColumns.map((column) => (
             <ColumnView
               key={column.id}
@@ -703,6 +786,7 @@ function ColumnView(props: ColumnViewProps) {
       </header>
 
       <div className="column-cards">
+        {props.cards.length === 0 && <p className="column-empty">Пусто. Перетащите карточку сюда.</p>}
         {props.cards.map((card) =>
           card.id === props.activeCardId ? (
             // «Тень»: место, куда карточка встанет после дропа

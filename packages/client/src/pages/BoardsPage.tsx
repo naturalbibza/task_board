@@ -22,7 +22,15 @@ export function BoardsPage() {
     if (user) reload();
   }, [user, reload]);
 
-  if (loading) return <main className="page">Загрузка…</main>;
+  if (loading) {
+    return (
+      <main className="page" aria-busy="true">
+        <div className="skeleton skeleton-bar" />
+        <div className="skeleton skeleton-line" />
+        <div className="skeleton skeleton-line skeleton-short" />
+      </main>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
 
   const onCreate = async () => {
@@ -80,7 +88,14 @@ export function BoardsPage() {
       </form>
 
       {boards === null ? (
-        <p className="empty">Загрузка…</p>
+        <ul className="board-list" aria-busy="true">
+          <li className="card board-item">
+            <div className="skeleton skeleton-line" />
+          </li>
+          <li className="card board-item">
+            <div className="skeleton skeleton-line skeleton-short" />
+          </li>
+        </ul>
       ) : boards.length === 0 ? (
         <p className="empty">У вас пока нет досок. Создайте первую выше.</p>
       ) : (
