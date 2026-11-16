@@ -1,13 +1,12 @@
-// Идемпотентное применение миграций при старте (используется в CMD контейнера
-// и через pnpm db:migrate). drizzle-kit migrate в контейнере падал молча,
-// программный мигратор drizzle-orm печатает ошибки явно.
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
+// Идемпотентное применение миграций (используется в CMD контейнера и через pnpm db:migrate).
+// Каждый файл применяется отдельной транзакцией — см. db/migrations.ts (enum на PG16).
 import { fileURLToPath } from 'node:url';
 import { db } from './db';
+import { runMigrations } from './db/migrations';
 
 const migrationsFolder = fileURLToPath(new URL('../drizzle', import.meta.url));
 
-await migrate(db, { migrationsFolder });
-console.log('[migrate] миграции применены');
+const applied = await runMigrations(db, migrationsFolder);
+console.log(`[migrate] применено новых миграций: ${applied}`);
 
 process.exit(0);

@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { Client, Pool } from 'pg';
 import { loadServerEnv } from '@task-board/shared';
 import * as schema from './schema';
+import { runMigrations } from './migrations';
 
 const here = path.dirname(fileURLToPath(import.meta.url)); // packages/server/src/db
 const serverRoot = path.resolve(here, '../..'); // packages/server
@@ -165,6 +165,7 @@ export const env = loadServerEnv();
 
 export const db = drizzle(new Pool({ connectionString: env.DATABASE_URL }), { schema });
 
-// Схема всегда актуальна на старте: миграции идемпотентны (прод прогоняет их же в CMD)
-await migrate(db, { migrationsFolder: path.join(serverRoot, 'drizzle') });
-console.log('[db] миграции применены');
+// Схема всегда актуальна на старте: миграции идемпотентны (прод прогоняет их же в CMD).
+// Каждый файл — отдельной транзакцией (см. db/migrations.ts: enum на PG16).
+const applied = await runMigrations(db, path.join(serverRoot, 'drizzle'));
+console.log(`[db] миграции применены (новых: ${applied})`);
