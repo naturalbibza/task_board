@@ -1,5 +1,5 @@
 ﻿import { Router } from 'express';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
 import type { RequestHandler } from 'express';
 import {
   can,
@@ -15,7 +15,7 @@ import {
   type MemberDto,
 } from '@task-board/shared';
 import { db } from '../db';
-import { boardMembers, boards, cards, columns, users } from '../db/schema';
+import { boardMembers, boards, cards, columns, invites, users } from '../db/schema';
 import { HttpError } from './errors';
 import { requireUserId } from './session';
 import { emitToBoard } from '../ws/emit';
@@ -260,11 +260,33 @@ const removeMember: RequestHandler<{ id: string; userId: string }> = async (req,
     throw new HttpError(403, 'FORBIDDEN', 'Удалить админа может только владелец');
   }
 
-  await db
-    .delete(boardMembers)
-    .where(and(eq(boardMembers.boardId, access.boardId), eq(boardMembers.userId, targetId)));
+  // Удаляем участника и отзываем ссылку, по которой он вступил:
+  // иначе он вернётся в доску по той же самой ссылке (v2).
+  // Для участников, вступивших до v2 (inviteId неизвестен), отзываем все активные ссылки.
+  const revokedInviteIds = await db.transaction(async (tx) => {
+    await tx
+      .delete(boardMembers)
+      .where(and(eq(boardMembers.boardId, access.boardId), eq(boardMembers.userId, targetId)));
+
+    const activeInvites = await tx
+      .select({ id: invites.id })
+      .from(invites)
+      .where(
+        and(
+          eq(invites.boardId, access.boardId),
+          isNull(invites.revokedAt),
+          target.inviteId ? eq(invites.id, target.inviteId) : undefined,
+        ),
+      );
+    if (activeInvites.length === 0) return [] as string[];
+
+    const ids = activeInvites.map((i) => i.id);
+    await tx.update(invites).set({ revokedAt: new Date() }).where(inArray(invites.id, ids));
+    return ids;
+  });
+
   emitToBoard(access.boardId, 'member:removed', { boardId: access.boardId, userId: targetId });
-  res.json({ ok: true });
+  res.json({ ok: true, revokedInvites: revokedInviteIds.length });
 };
 
 boardsRouter.get('/', listBoards);

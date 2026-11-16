@@ -36,6 +36,13 @@
       "when": 1794825427618,
       "tag": "0004_v2-role-backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794835126356,
+      "tag": "0005_v2-member-invite",
+      "breakpoints": true
     }
   ]
 }

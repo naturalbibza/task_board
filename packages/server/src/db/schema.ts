@@ -37,6 +37,9 @@ export const boardMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: roleEnum().notNull(),
+    // Ссылка, по которой участник вступил (v2): при удалении её отзываем,
+    // чтобы он не вернулся по той же ссылке.
+    inviteId: text().references(() => invites.id, { onDelete: 'set null' }),
     joinedAt: ts().notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.boardId, t.userId] })],

@@ -70,10 +70,21 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
   };
 
   const removeMember = async (member: MemberDto) => {
-    if (!window.confirm(`Удалить «${member.name}» из доски?`)) return;
+    if (
+      !window.confirm(
+        `Удалить «${member.name}» из доски?\n\nДоступ по ссылке-приглашению будет отозван — вернуться по ней он не сможет.`,
+      )
+    ) {
+      return;
+    }
     try {
-      await boardsApi.removeMember(props.boardId, member.id);
+      const res = await boardsApi.removeMember(props.boardId, member.id);
       setMembers((prev) => prev.filter((m) => m.id !== member.id));
+      // Отозванные ссылки должны сразу отобразиться как «отозвана»
+      if (res.revokedInvites > 0) {
+        const invitesRes = await boardsApi.listInvites(props.boardId);
+        setInvites(invitesRes.invites);
+      }
       setError(null);
     } catch (err) {
       setError((err as Error).message);

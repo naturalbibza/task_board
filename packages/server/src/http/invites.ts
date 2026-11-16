@@ -103,6 +103,7 @@ const joinByToken: RequestHandler<{ token: string }> = async (req, res) => {
       boardId: invite.boardId,
       userId,
       role: invite.role === 'MEMBER' ? 'EDITOR' : invite.role,
+      inviteId: invite.id,
     });
   }
   res.json({ boardId: invite.boardId, boardTitle: board.title });

@@ -40,8 +40,13 @@ export function updateMember(
   });
 }
 
-export function removeMember(boardId: string, userId: string): Promise<{ ok: boolean }> {
-  return api<{ ok: boolean }>(`/boards/${boardId}/members/${userId}`, { method: 'DELETE' });
+export function removeMember(
+  boardId: string,
+  userId: string,
+): Promise<{ ok: boolean; revokedInvites: number }> {
+  return api<{ ok: boolean; revokedInvites: number }>(`/boards/${boardId}/members/${userId}`, {
+    method: 'DELETE',
+  });
 }
 
 // --- Инвайты (фаза 9, роль — фаза 12) ---

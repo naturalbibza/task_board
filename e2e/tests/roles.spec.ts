@@ -94,5 +94,10 @@ test('роли: VIEWER не редактирует, после смены на E
   expect(removed.ok()).toBeTruthy();
   await expect(pageB).toHaveURL(/\/boards$/, { timeout: 8000 });
 
+  // Ссылка, по которой B вступил, отозвана — вернуться по ней нельзя
+  await pageB.goto(`/join/${token}`);
+  await expect(pageB.getByText('Не удалось присоединиться')).toBeVisible({ timeout: 8000 });
+  await expect(pageB.getByText('Ссылка недействительна или истекла')).toBeVisible();
+
   await contextB.close();
 });
