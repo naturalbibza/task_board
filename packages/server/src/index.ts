@@ -11,6 +11,7 @@ import { boardsRouter } from './http/boards';
 import { createInvite, invitesRouter, joinRouter, listInvites } from './http/invites';
 import { errorHandler } from './http/errors';
 import { registerSocketHandlers } from './ws';
+import { setIo } from './ws/emit';
 import type { ClientToServerEvents, ServerToClientEvents } from '@task-board/shared';
 
 const app = express();
@@ -47,6 +48,7 @@ app.use(errorHandler);
 // Один HTTP-сервер обслуживает и REST, и WebSocket (план §1)
 const httpServer = createServer(app);
 const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(httpServer);
+setIo(io);
 registerSocketHandlers(io);
 
 httpServer.listen(env.PORT, () => {

@@ -15,6 +15,27 @@
       "when": 1794571859410,
       "tag": "0001_fantastic_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794825407027,
+      "tag": "0002_v2-role-values",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794825426351,
+      "tag": "0003_v2-invite-role",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794825427618,
+      "tag": "0004_v2-role-backfill",
+      "breakpoints": true
     }
   ]
 }

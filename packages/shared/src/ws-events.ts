@@ -1,7 +1,7 @@
 // WS-протокол доски (план §6) — единственный контракт клиента и сервера.
 // Все payload'ы валидируются zod-схемами: intents — на сервере, события — типизированы.
 import { z } from 'zod';
-import type { BoardDto, BoardSnapshot, CardDto, ColumnDto, UserDto } from './api-types';
+import type { BoardSnapshot, CardDto, ColumnDto, MemberDto, UserDto } from './api-types';
 
 // --- Intents (client → server) ---
 
@@ -55,7 +55,7 @@ export type WsError = { code: string; message: string };
 /** События сервер → клиент (delta-события, FR-12). */
 export interface ServerToClientEvents {
   'board:state': (payload: BoardSnapshot) => void;
-  'board:updated': (payload: { board: BoardDto }) => void;
+  'board:updated': (payload: { boardId: string; title: string }) => void;
   'column:created': (payload: { column: ColumnDto }) => void;
   'column:updated': (payload: { column: ColumnDto }) => void;
   'column:moved': (payload: { columns: ColumnDto[] }) => void;
@@ -64,6 +64,8 @@ export interface ServerToClientEvents {
   'card:updated': (payload: { card: CardDto }) => void;
   'card:moved': (payload: { cards: CardDto[] }) => void;
   'card:deleted': (payload: { cardId: string; columnId: string }) => void;
+  'member:updated': (payload: { boardId: string; member: MemberDto }) => void;
+  'member:removed': (payload: { boardId: string; userId: string }) => void;
   'presence:update': (payload: { boardId: string; users: PresenceUser[] }) => void;
   'presence:editing': (payload: { cardId: string; userId: string | null }) => void;
   'ws:error': (payload: WsError) => void;

@@ -25,6 +25,7 @@ interface CardViewProps {
   onNotice: (message: string) => void;
   editingBy: string | null; // userId другого редактирующего
   members: UserDto[];
+  readOnly?: boolean;
 }
 
 /** Карточка: перетаскивание + модалка редактирования (включая перенос в колонку). */
@@ -48,12 +49,12 @@ export function CardView(props: CardViewProps) {
     setDescription(props.card.description ?? '');
     setTargetColumnId(props.card.columnId);
     setOpen(true);
-    props.ws.editingStart(props.card.id);
+    if (!props.readOnly) props.ws.editingStart(props.card.id);
   };
 
   const closeModal = () => {
     setOpen(false);
-    props.ws.editingStop(props.card.id);
+    if (!props.readOnly) props.ws.editingStop(props.card.id);
   };
 
   const save = (e: FormEvent) => {
@@ -78,9 +79,13 @@ export function CardView(props: CardViewProps) {
       <article
         ref={setNodeRef}
         data-card-id={props.card.id}
-        className="group cursor-grab touch-manipulation rounded-lg border bg-card p-3 text-sm shadow-xs transition hover:border-primary/40 hover:shadow-sm active:cursor-grabbing"
+        className={
+          props.readOnly
+            ? 'rounded-lg border bg-card p-3 text-sm shadow-xs'
+            : 'group cursor-grab touch-manipulation rounded-lg border bg-card p-3 text-sm shadow-xs transition hover:border-primary/40 hover:shadow-sm active:cursor-grabbing'
+        }
         {...attributes}
-        {...listeners}
+        {...(props.readOnly ? {} : listeners)}
         onClick={openModal}
       >
         <div className="flex items-start justify-between gap-2">
@@ -104,7 +109,11 @@ export function CardView(props: CardViewProps) {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Карточка</DialogTitle>
-            <DialogDescription>Измените заголовок и описание или перенесите карточку в другую колонку.</DialogDescription>
+            <DialogDescription>
+              {props.readOnly
+                ? 'Просмотр карточки — ваша роль не позволяет изменять содержимое доски.'
+                : 'Измените заголовок и описание или перенесите карточку в другую колонку.'}
+            </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={save} className="grid gap-4">
@@ -116,6 +125,7 @@ export function CardView(props: CardViewProps) {
                 onChange={(e) => setTitle(e.target.value)}
                 maxLength={200}
                 required
+                disabled={props.readOnly}
               />
             </div>
 
@@ -128,12 +138,13 @@ export function CardView(props: CardViewProps) {
                 onChange={(e) => setDescription(e.target.value)}
                 maxLength={5000}
                 placeholder="Детали задачи…"
+                disabled={props.readOnly}
               />
             </div>
 
             <div className="grid gap-2">
               <Label htmlFor={`card-col-${props.card.id}`}>Колонка</Label>
-              <Select value={targetColumnId} onValueChange={setTargetColumnId}>
+              <Select value={targetColumnId} onValueChange={setTargetColumnId} disabled={props.readOnly}>
                 <SelectTrigger id={`card-col-${props.card.id}`} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
@@ -148,18 +159,31 @@ export function CardView(props: CardViewProps) {
             </div>
 
             <DialogFooter className="gap-2 sm:justify-between">
-              <Button type="button" variant="ghost" className="text-destructive hover:text-destructive" onClick={remove}>
-                <Trash2 className="size-4" />
-                Удалить
-              </Button>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" onClick={closeModal}>
-                  Отмена
+              {props.readOnly ? (
+                <Button type="button" variant="outline" onClick={closeModal} className="ml-auto">
+                  Закрыть
                 </Button>
-                <Button type="submit" disabled={!title.trim()}>
-                  Сохранить
-                </Button>
-              </div>
+              ) : (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    onClick={remove}
+                  >
+                    <Trash2 className="size-4" />
+                    Удалить
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={closeModal}>
+                      Отмена
+                    </Button>
+                    <Button type="submit" disabled={!title.trim()}>
+                      Сохранить
+                    </Button>
+                  </div>
+                </>
+              )}
             </DialogFooter>
           </form>
         </DialogContent>

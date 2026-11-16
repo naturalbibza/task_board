@@ -65,24 +65,20 @@ CSS-переменные тем. Для shadcn нужен alias `@/* → src/*` 
 
 ### Миграция ролей (важно)
 
-PostgreSQL не умеет удалять значения enum, а drizzle-kit не генерирует `USING`-каст.
-Поэтому:
+PostgreSQL не умеет удалять значения enum, а смена типа требует `USING`-каста, который
+drizzle-kit не генерирует. Поэтому тип **расширяется без пересоздания**:
 
-1. Отдельная **custom-миграция** (`drizzle-kit generate --custom` — штатный механизм для
-   ручного SQL; сгенерированные файлы не правим):
-   ```sql
-   CREATE TYPE board_role AS ENUM ('OWNER','ADMIN','EDITOR','VIEWER');
-   ALTER TABLE board_members ADD COLUMN role_new board_role;
-   UPDATE board_members
-      SET role_new = (CASE WHEN role = 'OWNER' THEN 'OWNER' ELSE 'EDITOR' END)::board_role;
-   ALTER TABLE board_members ALTER COLUMN role_new SET NOT NULL;
-   ALTER TABLE board_members DROP COLUMN role;
-   ALTER TABLE board_members RENAME COLUMN role_new TO role;
-   ALTER TABLE board_members ALTER COLUMN role SET DEFAULT 'EDITOR';
-   DROP TYPE role;
-   ```
-2. Затем меняется `schema.ts` и генерируется остальной DDL (новые колонки, таблицы).
-3. Проверка миграции — на копии прод-БД (`scripts/prod-db-check.sh` как образец),
+1. `ALTER TYPE "role" ADD VALUE 'ADMIN' | 'EDITOR' | 'VIEWER'` + снятие default — обычная
+   сгенерированная миграция (`0002_v2-role-values.sql`). Добавление значений допустимо в
+   транзакции; default снимается, чтобы не использовать новое значение в той же транзакции.
+2. `invites.role` (default `EDITOR`) — отдельная сгенерированная миграция
+   (`0003_v2-invite-role.sql`).
+3. Бэкфилл `MEMBER → EDITOR` — **custom-миграция** (`drizzle-kit generate --custom` —
+   штатный механизм для ручного SQL; сгенерированные файлы не правим),
+   `0004_v2-role-backfill.sql`.
+4. Значение `MEMBER` остаётся в типе как legacy: наружу отдаётся только 4 роли
+   (`normalizeRole` в `http/boards.ts`), приложение его не пишет.
+5. Проверка миграции — на копии прод-БД (`scripts/prod-db-check.sh` как образец),
    только после этого деплой.
 
 Остальные изменения — обычные аддитивные миграции (новые nullable-колонки и таблицы).

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { LayoutGrid, LogOut, Plus, Trash2 } from 'lucide-react';
 import type { BoardDto } from '@task-board/shared';
+import { BOARD_ROLE_LABELS } from '@task-board/shared';
 import { toast } from 'sonner';
 import * as boardsApi from '../api/boards';
 import { errorText, useAuth } from '../state/auth-context';
@@ -178,9 +179,7 @@ export function BoardsPage() {
                 <CardContent className="flex min-h-24 flex-col justify-between gap-3 p-5">
                   <h2 className="line-clamp-2 pr-6 font-medium leading-snug">{board.title}</h2>
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                      {board.role === 'OWNER' ? 'владелец' : 'участник'}
-                    </span>
+                    <span className="text-xs text-muted-foreground">{BOARD_ROLE_LABELS[board.role]}</span>
                     {board.role === 'OWNER' && (
                       <Button
                         type="button"

@@ -63,9 +63,9 @@ await page.waitForTimeout(250);
 await page.screenshot({ path: `${OUT}/04-card-modal-dark.png` });
 await page.getByRole('button', { name: 'Отмена' }).click();
 
-await page.getByRole('button', { name: 'Поделиться' }).click();
+await page.getByRole('button', { name: 'Участники' }).click();
 await page.waitForTimeout(250);
-await page.screenshot({ path: `${OUT}/05-share-dark.png` });
+await page.screenshot({ path: `${OUT}/05-access-dark.png` });
 await page.getByRole('button', { name: 'Закрыть' }).click();
 
 await page.goto('/boards');

@@ -109,7 +109,7 @@ test.describe('v2: дымовые сценарии', () => {
     await register(page);
     await createBoard(page);
 
-    await page.getByRole('button', { name: 'Поделиться' }).click();
+    await page.getByRole('button', { name: 'Участники' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog.getByText('Участники · 1')).toBeVisible();

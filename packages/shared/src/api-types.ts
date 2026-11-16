@@ -25,12 +25,23 @@ export type UserDto = {
 
 // --- Доски и контент (фаза 5) ---
 
+/** Роль участника на доске (v2). Права — см. packages/shared/src/permissions.ts. */
+export type BoardRole = 'OWNER' | 'ADMIN' | 'EDITOR' | 'VIEWER';
+
 export type BoardDto = {
   id: string;
   title: string;
   createdAt: string;
   updatedAt: string;
-  role: 'OWNER' | 'MEMBER';
+  role: BoardRole;
+};
+
+/** Участник доски с ролью (v2). */
+export type MemberDto = {
+  id: string;
+  name: string;
+  email: string;
+  role: BoardRole;
 };
 
 export type ColumnDto = {
@@ -56,7 +67,7 @@ export type BoardSnapshot = {
   board: BoardDto;
   columns: ColumnDto[];
   cards: CardDto[];
-  members: UserDto[];
+  members: MemberDto[];
 };
 
 export const createBoardSchema = z.object({
@@ -78,6 +89,28 @@ export const updateCardSchema = z.object({
   title: z.string().min(1, 'Заголовок не может быть пустым').max(200).optional(),
   description: z.string().max(5000).nullable().optional(),
 });
+
+// --- Доступы (v2, фаза 12) ---
+
+/** Смена роли участника: владелец может назначать ADMIN, админ — только ниже себя. */
+export const updateMemberSchema = z.object({
+  role: z.enum(['ADMIN', 'EDITOR', 'VIEWER'], { message: 'Некорректная роль' }),
+});
+
+/** Роль, с которой можно вступить по ссылке (OWNER не выдаётся никогда). */
+export const inviteRoleSchema = z.enum(['ADMIN', 'EDITOR', 'VIEWER']);
+
+export const createInviteSchema = z.object({
+  role: inviteRoleSchema.optional(),
+});
+
+export type InviteDto = {
+  id: string;
+  token: string;
+  expiresAt: string;
+  revoked: boolean;
+  role: 'ADMIN' | 'EDITOR' | 'VIEWER';
+};
 
 // --- Общие контрактные типы (NFR-8: единый формат ошибок) ---
 

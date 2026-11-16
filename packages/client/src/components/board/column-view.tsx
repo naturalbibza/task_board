@@ -23,6 +23,7 @@ interface ColumnViewProps {
   onNotice: (message: string) => void;
   editingByCard: Record<string, string>;
   members: UserDto[];
+  readOnly?: boolean;
 }
 
 /** Колонка: перетаскивание за ручку, переименование, удаление, карточки. */
@@ -80,10 +81,14 @@ export function ColumnView(props: ColumnViewProps) {
     >
       <header className="flex items-center gap-1 px-0.5">
         <span
-          className="cursor-grab touch-none rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing"
+          className={
+            props.readOnly
+              ? 'rounded p-1 text-muted-foreground/50'
+              : 'cursor-grab touch-none rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:cursor-grabbing'
+          }
           aria-label={`Перетащить колонку «${props.column.title}»`}
           {...attributes}
-          {...listeners}
+          {...(props.readOnly ? {} : listeners)}
         >
           <GripVertical className="size-4" />
         </span>
@@ -119,22 +124,26 @@ export function ColumnView(props: ColumnViewProps) {
 
         <span className="text-xs tabular-nums text-muted-foreground">{props.cards.length}</span>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-7 text-muted-foreground" aria-label="Действия с колонкой">
-              <MoreHorizontal className="size-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={onDeleteColumn}
-            >
-              <Trash2 className="size-4" />
-              Удалить колонку
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {!props.readOnly && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground"
+                aria-label="Действия с колонкой"
+              >
+                <MoreHorizontal className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDeleteColumn}>
+                <Trash2 className="size-4" />
+                Удалить колонку
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </header>
 
       <div className="flex min-h-2 flex-1 flex-col gap-2 overflow-y-auto px-0.5">
@@ -163,30 +172,33 @@ export function ColumnView(props: ColumnViewProps) {
               onNotice={props.onNotice}
               editingBy={props.editingByCard[card.id] ?? null}
               members={props.members}
+              readOnly={props.readOnly}
             />
           ),
         )}
       </div>
 
-      <form onSubmit={onCreateCard} className="flex items-center gap-1 px-0.5">
-        <Input
-          value={newCardTitle}
-          onChange={(e) => setNewCardTitle(e.target.value)}
-          placeholder="+ карточка"
-          maxLength={200}
-          className="h-8 border-transparent bg-transparent shadow-none hover:border-input focus-visible:bg-background dark:bg-transparent dark:focus-visible:bg-background/60"
-        />
-        <Button
-          type="submit"
-          size="icon"
-          variant="ghost"
-          className="size-8 shrink-0"
-          aria-label="Добавить карточку"
-          disabled={!newCardTitle.trim()}
-        >
-          <Plus className="size-4" />
-        </Button>
-      </form>
+      {!props.readOnly && (
+        <form onSubmit={onCreateCard} className="flex items-center gap-1 px-0.5">
+          <Input
+            value={newCardTitle}
+            onChange={(e) => setNewCardTitle(e.target.value)}
+            placeholder="+ карточка"
+            maxLength={200}
+            className="h-8 border-transparent bg-transparent shadow-none hover:border-input focus-visible:bg-background dark:bg-transparent dark:focus-visible:bg-background/60"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            variant="ghost"
+            className="size-8 shrink-0"
+            aria-label="Добавить карточку"
+            disabled={!newCardTitle.trim()}
+          >
+            <Plus className="size-4" />
+          </Button>
+        </form>
+      )}
     </section>
   );
 }

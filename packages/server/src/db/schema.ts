@@ -7,7 +7,7 @@ const id = () =>
     .$defaultFn(() => randomUUID());
 const ts = () => timestamp({ withTimezone: true });
 
-export const roleEnum = pgEnum('role', ['OWNER', 'MEMBER']);
+export const roleEnum = pgEnum('role', ['OWNER', 'MEMBER', 'ADMIN', 'EDITOR', 'VIEWER']);
 
 export const users = pgTable('users', {
   id: id(),
@@ -36,7 +36,7 @@ export const boardMembers = pgTable(
     userId: text()
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    role: roleEnum().notNull().default('MEMBER'),
+    role: roleEnum().notNull(),
     joinedAt: ts().notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.boardId, t.userId] })],
@@ -86,6 +86,7 @@ export const invites = pgTable(
       .notNull()
       .references(() => boards.id, { onDelete: 'cascade' }),
     token: text().notNull().unique(), // ≥ 32 случайных символа (FR-16)
+    role: roleEnum().notNull().default('EDITOR'), // роль при вступлении (v2, FR-25)
     expiresAt: ts().notNull(),
     revokedAt: ts(),
     createdBy: text()

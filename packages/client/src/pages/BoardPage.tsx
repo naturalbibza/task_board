@@ -15,15 +15,16 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import type { BoardSnapshot, CardDto, ColumnDto, PresenceUser } from '@task-board/shared';
-import { ArrowLeft, GripVertical, LayoutGrid, Share2 } from 'lucide-react';
+import type { BoardSnapshot, CardDto, ColumnDto, MemberDto, PresenceUser } from '@task-board/shared';
+import { BOARD_ROLE_LABELS, can } from '@task-board/shared';
+import { ArrowLeft, GripVertical, LayoutGrid, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import * as boardsApi from '../api/boards';
 import { getSocket } from '../api/socket';
 import { errorText, useAuth } from '../state/auth-context';
 import { cn } from '@/lib/utils';
 import { MembersBar } from '@/components/MembersBar';
-import { ShareModal } from '@/components/ShareModal';
+import { BoardAccessModal } from '@/components/BoardAccessModal';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BoardTitle } from '@/components/board/board-title';
 import { ColumnView } from '@/components/board/column-view';
@@ -162,6 +163,9 @@ export function BoardPage() {
     [snapshot],
   );
 
+  // Права текущего пользователя на доске (FR-23)
+  const canEdit = snapshot ? can(snapshot.board.role, 'editContent') : false;
+
   // Базовый порядок карточек по колонкам (без превью) — источник правды для дропа.
   const cardsByColumnBase = useMemo(() => {
     const map = new Map<string, CardDto[]>();
@@ -190,6 +194,8 @@ export function BoardPage() {
   const onDragStart = (event: DragStartEvent) => {
     setCardPreviewState(null);
     setColumnOrderState(null);
+    // Роль VIEWER не может менять контент — drag не начинаем
+    if (!canEdit) return;
     const type = event.active.data.current?.type as 'card' | 'column' | undefined;
 
     if (type === 'card') {
@@ -356,8 +362,30 @@ export function BoardPage() {
       setSnapshot((prev) => prev && { ...prev, cards: mergeById(prev.cards, [payload.card]) });
     const onCardDeleted = (payload: { cardId: string; columnId: string }) =>
       setSnapshot((prev) => prev && { ...prev, cards: prev.cards.filter((c) => c.id !== payload.cardId) });
-    const onBoardUpdated = (payload: { board: BoardSnapshot['board'] }) =>
-      setSnapshot((prev) => prev && { ...prev, board: payload.board });
+    const onBoardUpdated = (payload: { boardId: string; title: string }) =>
+      setSnapshot((prev) =>
+        prev && prev.board.id === payload.boardId ? { ...prev, board: { ...prev.board, title: payload.title } } : prev,
+      );
+    const onMemberUpdated = (payload: { boardId: string; member: MemberDto }) =>
+      setSnapshot(
+        (prev) =>
+          prev && {
+            ...prev,
+            members: prev.members.map((m) => (m.id === payload.member.id ? payload.member : m)),
+            board:
+              payload.member.id === user?.id ? { ...prev.board, role: payload.member.role } : prev.board,
+          },
+      );
+    const onMemberRemoved = (payload: { boardId: string; userId: string }) => {
+      if (payload.userId === user?.id) {
+        showNotice('Доступ к доске отозван');
+        navigate('/boards');
+        return;
+      }
+      setSnapshot(
+        (prev) => prev && { ...prev, members: prev.members.filter((m) => m.id !== payload.userId) },
+      );
+    };
     const onEditing = (payload: { cardId: string; userId: string | null }) =>
       setEditingByCard((prev) => {
         const next = { ...prev };
@@ -379,6 +407,8 @@ export function BoardPage() {
     socket.on('card:updated', onCardUpdated);
     socket.on('card:deleted', onCardDeleted);
     socket.on('board:updated', onBoardUpdated);
+    socket.on('member:updated', onMemberUpdated);
+    socket.on('member:removed', onMemberRemoved);
     socket.on('presence:editing', onEditing);
 
     // Переподключение (потеря сети, bfcache, рестарт сервера): заново вступаем
@@ -423,6 +453,8 @@ export function BoardPage() {
       socket.off('card:updated', onCardUpdated);
       socket.off('card:deleted', onCardDeleted);
       socket.off('board:updated', onBoardUpdated);
+      socket.off('member:updated', onMemberUpdated);
+      socket.off('member:removed', onMemberRemoved);
       socket.off('presence:editing', onEditing);
     };
   }, [id, showNotice, user?.id]);
@@ -570,13 +602,13 @@ export function BoardPage() {
 
           <BoardTitle
             title={snapshot.board.title}
-            canRename={snapshot.board.role === 'OWNER'}
+            canRename={can(snapshot.board.role, 'renameBoard')}
             onRename={async (title) => setSnapshot(await boardsApi.renameBoard(snapshot.board.id, title))}
             onError={setError}
           />
 
           <Badge variant={snapshot.board.role === 'OWNER' ? 'default' : 'secondary'} className="hidden md:inline-flex">
-            {snapshot.board.role === 'OWNER' ? 'владелец' : 'участник'}
+            {BOARD_ROLE_LABELS[snapshot.board.role]}
           </Badge>
 
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
@@ -593,12 +625,17 @@ export function BoardPage() {
               <span className={cn('size-1.5 rounded-full', connected ? 'bg-emerald-500' : 'bg-destructive')} />
               <span className="hidden sm:inline">{connected ? 'онлайн' : 'нет связи'}</span>
             </span>
-            {snapshot.board.role === 'OWNER' && (
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShareOpen(true)}>
-                <Share2 className="size-4" />
-                <span className="hidden sm:inline">Поделиться</span>
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              aria-label="Участники"
+              onClick={() => setShareOpen(true)}
+            >
+              <Users className="size-4" />
+              <span className="hidden sm:inline">Участники</span>
+              <span className="text-xs tabular-nums text-muted-foreground">{snapshot.members.length}</span>
+            </Button>
             <ThemeToggle />
           </div>
         </div>
@@ -634,14 +671,17 @@ export function BoardPage() {
               onNotice={showNotice}
               editingByCard={editingByCard}
               members={snapshot.members}
+              readOnly={!canEdit}
             />
           ))}
 
-          <NewColumnForm
-            onCreate={(title) => {
-              ws.createColumn(title);
-            }}
-          />
+          {canEdit && (
+            <NewColumnForm
+              onCreate={(title) => {
+                ws.createColumn(title);
+              }}
+            />
+          )}
         </div>
 
         <DragOverlay className="pointer-events-none">
@@ -670,7 +710,12 @@ export function BoardPage() {
       </DndContext>
 
       {shareOpen && (
-        <ShareModal boardId={snapshot.board.id} members={snapshot.members} onClose={() => setShareOpen(false)} />
+        <BoardAccessModal
+          boardId={snapshot.board.id}
+          members={snapshot.members}
+          myRole={snapshot.board.role}
+          onClose={() => setShareOpen(false)}
+        />
       )}
     </div>
   );
