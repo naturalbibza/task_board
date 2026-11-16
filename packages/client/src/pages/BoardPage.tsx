@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   DndContext,
@@ -8,8 +8,6 @@ import {
   TouchSensor,
   closestCorners,
   pointerWithin,
-  useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
   type CollisionDetection,
@@ -17,12 +15,24 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import type { BoardSnapshot, CardDto, ColumnDto, PresenceUser, UserDto } from '@task-board/shared';
+import type { BoardSnapshot, CardDto, ColumnDto, PresenceUser } from '@task-board/shared';
+import { ArrowLeft, GripVertical, LayoutGrid, Share2 } from 'lucide-react';
+import { toast } from 'sonner';
 import * as boardsApi from '../api/boards';
 import { getSocket } from '../api/socket';
-import { errorText } from '../state/auth-context';
-import { MembersBar } from '../components/MembersBar';
-import { ShareModal } from '../components/ShareModal';
+import { errorText, useAuth } from '../state/auth-context';
+import { cn } from '@/lib/utils';
+import { MembersBar } from '@/components/MembersBar';
+import { ShareModal } from '@/components/ShareModal';
+import { ThemeToggle } from '@/components/theme-toggle';
+import { BoardTitle } from '@/components/board/board-title';
+import { ColumnView } from '@/components/board/column-view';
+import { NewColumnForm } from '@/components/board/new-column-form';
+import type { WsApi } from '@/components/board/types';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const STEP = 1024;
 
@@ -94,9 +104,9 @@ function resolveColumnDrop(rect: RectLike, columnId: string): { index: number } 
   const cx = rect.left + rect.width / 2;
   const cy = rect.top + rect.height / 2;
   const el = document.elementFromPoint(cx, cy);
-  if (!el?.closest('.columns')) return null;
+  if (!el?.closest('[data-columns-row]')) return null;
 
-  const columns = [...document.querySelectorAll<HTMLElement>('.columns > [data-column-id]')].filter(
+  const columns = [...document.querySelectorAll<HTMLElement>('[data-columns-row] > [data-column-id]')].filter(
     (node) => node.dataset.columnId !== columnId,
   );
   let index = columns.length;
@@ -118,11 +128,11 @@ type DragState =
 export function BoardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [snapshot, setSnapshot] = useState<BoardSnapshot | null>(null);
   const [online, setOnline] = useState<PresenceUser[]>([]);
   const [editingByCard, setEditingByCard] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [connected, setConnected] = useState(() => getSocket().connected);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -135,18 +145,9 @@ export function BoardPage() {
   const columnOrderRef = useRef<string[] | null>(null);
   const wasOffline = useRef(false);
 
-  const noticeTimer = useRef<number | null>(null);
   const showNotice = useCallback((message: string) => {
-    setNotice(message);
-    if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(null), 3000);
+    toast(message);
   }, []);
-  useEffect(
-    () => () => {
-      if (noticeTimer.current) window.clearTimeout(noticeTimer.current);
-    },
-    [],
-  );
 
   // Мышь — с порогом 5 px; тач — «долгое нажатие» (220 мс), чтобы свайп
   // оставался прокруткой доски, а не превращался в случайный перенос.
@@ -360,7 +361,8 @@ export function BoardPage() {
     const onEditing = (payload: { cardId: string; userId: string | null }) =>
       setEditingByCard((prev) => {
         const next = { ...prev };
-        if (payload.userId) next[payload.cardId] = payload.userId;
+        // Свой бейдж «редактирует» не показываем — только чужой
+        if (payload.userId && payload.userId !== user?.id) next[payload.cardId] = payload.userId;
         else delete next[payload.cardId];
         return next;
       });
@@ -423,11 +425,11 @@ export function BoardPage() {
       socket.off('board:updated', onBoardUpdated);
       socket.off('presence:editing', onEditing);
     };
-  }, [id, showNotice]);
+  }, [id, showNotice, user?.id]);
 
   // WS-мутации (FR-8, фаза 8): optimistic не нужен — событие от сервера
   // перезаписывает состояние (reconciliation, конституция №3)
-  const ws = useMemo(() => {
+  const ws = useMemo<WsApi>(() => {
     const socket = getSocket();
     const boardId = id;
     // Офлайн-мутации не буферизуем: socket.io иначе отправит устаревший intent
@@ -458,7 +460,6 @@ export function BoardPage() {
         if (!guard()) return;
         socket.emit('card:update', { id: cardId, ...patch });
       },
-      // Перемещение из модалки карточки (мобильный сценарий): в конец целевой колонки
       moveCardToEnd: (cardId: string, toColumnId: string) => {
         if (!guard()) return;
         socket.emit('card:move', { id: cardId, toColumnId, beforeId: null, afterId: null });
@@ -489,10 +490,6 @@ export function BoardPage() {
     }
   }, [id]);
 
-  useEffect(() => {
-    if (error) void reload();
-  }, [error, reload]);
-
   // Порядок колонок с учётом превью перетаскивания (без изменения данных до дропа).
   const displayColumns = useMemo(() => {
     if (!columnOrder) return columns;
@@ -518,56 +515,93 @@ export function BoardPage() {
 
   if (error) {
     return (
-      <main className="page">
-        <p className="error">{error}</p>
-        <button type="button" onClick={() => navigate('/boards')}>
-          К списку досок
-        </button>
-      </main>
+      <div className="flex min-h-full items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Не удалось открыть доску</CardTitle>
+            <CardDescription>{error}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => {
+                void reload();
+              }}
+            >
+              Повторить
+            </Button>
+            <Button variant="outline" onClick={() => navigate('/boards')}>
+              К списку досок
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
+
   if (!snapshot) {
     return (
-      <main className="board-page" aria-busy="true">
-        <div className="board-skeleton">
-          <div className="skeleton skeleton-bar" />
-          <div className="skeleton-row">
-            <div className="skeleton skeleton-column" />
-            <div className="skeleton skeleton-column" />
-            <div className="skeleton skeleton-column" />
+      <div className="flex h-full flex-col" aria-busy="true">
+        <div className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+          <Skeleton className="h-7 w-24" />
+          <Skeleton className="h-6 w-40" />
+          <div className="ml-auto flex items-center gap-2">
+            <Skeleton className="size-7 rounded-full" />
+            <Skeleton className="h-7 w-28" />
           </div>
         </div>
-      </main>
+        <div className="flex gap-3 overflow-hidden p-4">
+          <Skeleton className="h-80 w-72 shrink-0 rounded-xl" />
+          <Skeleton className="h-80 w-72 shrink-0 rounded-xl" />
+          <Skeleton className="h-80 w-72 shrink-0 rounded-xl" />
+        </div>
+      </div>
     );
   }
 
   return (
-    <main className="board-page">
-      <header className="board-header">
-        <button type="button" className="link" onClick={() => navigate('/boards')}>
-          ← Доски
-        </button>
-        <BoardTitle
-          title={snapshot.board.title}
-          canRename={snapshot.board.role === 'OWNER'}
-          onRename={async (title) => setSnapshot(await boardsApi.renameBoard(snapshot.board.id, title))}
-          onError={setError}
-        />
-        <MembersBar online={online} members={snapshot.members} />
-        <span
-          className={`conn ${connected ? 'conn-ok' : 'conn-down'}`}
-          title={connected ? 'Соединение с сервером активно' : 'Нет связи: изменения не сохраняются'}
-        >
-          {connected ? 'онлайн' : 'нет связи'}
-        </span>
-        {snapshot.board.role === 'OWNER' && (
-          <button type="button" onClick={() => setShareOpen(true)}>
-            Поделиться
-          </button>
-        )}
-        {shareOpen && (
-          <ShareModal boardId={snapshot.board.id} members={snapshot.members} onClose={() => setShareOpen(false)} />
-        )}
+    <div className="flex h-full flex-col bg-background">
+      <header className="z-10 shrink-0 border-b bg-background/85 backdrop-blur">
+        <div className="flex h-14 items-center gap-1 px-2 sm:gap-2 sm:px-4">
+          <Button variant="ghost" size="sm" className="shrink-0 gap-1.5" onClick={() => navigate('/boards')}>
+            <ArrowLeft className="size-4" />
+            <span className="hidden sm:inline">Доски</span>
+          </Button>
+          <span className="hidden text-muted-foreground/40 sm:inline">/</span>
+
+          <BoardTitle
+            title={snapshot.board.title}
+            canRename={snapshot.board.role === 'OWNER'}
+            onRename={async (title) => setSnapshot(await boardsApi.renameBoard(snapshot.board.id, title))}
+            onError={setError}
+          />
+
+          <Badge variant={snapshot.board.role === 'OWNER' ? 'default' : 'secondary'} className="hidden md:inline-flex">
+            {snapshot.board.role === 'OWNER' ? 'владелец' : 'участник'}
+          </Badge>
+
+          <div className="ml-auto flex items-center gap-1 sm:gap-2">
+            <MembersBar online={online} members={snapshot.members} />
+            <span
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium',
+                connected
+                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                  : 'border-destructive/40 bg-destructive/10 text-destructive',
+              )}
+              title={connected ? 'Соединение с сервером активно' : 'Нет связи: изменения не сохраняются'}
+            >
+              <span className={cn('size-1.5 rounded-full', connected ? 'bg-emerald-500' : 'bg-destructive')} />
+              <span className="hidden sm:inline">{connected ? 'онлайн' : 'нет связи'}</span>
+            </span>
+            {snapshot.board.role === 'OWNER' && (
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShareOpen(true)}>
+                <Share2 className="size-4" />
+                <span className="hidden sm:inline">Поделиться</span>
+              </Button>
+            )}
+            <ThemeToggle />
+          </div>
+        </div>
       </header>
 
       <DndContext
@@ -581,10 +615,14 @@ export function BoardPage() {
         }}
         onDragCancel={clearDrag}
       >
-        <div className="columns">
+        <div data-columns-row className="flex flex-1 items-start gap-3 overflow-x-auto overflow-y-hidden p-3 sm:p-4">
           {displayColumns.length === 0 && (
-            <p className="board-empty">Колонок пока нет. Создайте первую — справа.</p>
+            <div className="flex w-72 shrink-0 flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              <LayoutGrid className="size-5" />
+              Колонок пока нет. Создайте первую справа.
+            </div>
           )}
+
           {displayColumns.map((column) => (
             <ColumnView
               key={column.id}
@@ -593,12 +631,12 @@ export function BoardPage() {
               activeCardId={dragCardId}
               columns={columns}
               ws={ws}
-              onError={setError}
               onNotice={showNotice}
               editingByCard={editingByCard}
               members={snapshot.members}
             />
           ))}
+
           <NewColumnForm
             onCreate={(title) => {
               ws.createColumn(title);
@@ -606,19 +644,23 @@ export function BoardPage() {
           />
         </div>
 
-        <DragOverlay className="drag-overlay">
+        <DragOverlay className="pointer-events-none">
           {activeDrag?.type === 'card' && activeDrag.card ? (
-            <article className="card card-view overlay-card">{activeDrag.card.title}</article>
+            <article className="w-64 rotate-2 rounded-lg border bg-card p-3 text-sm shadow-2xl">
+              {activeDrag.card.title}
+            </article>
           ) : activeDrag?.type === 'column' && activeDrag.column ? (
-            <section className="column overlay-column">
-              <header className="column-header">
-                <span className="drag-handle">⠿</span>
-                <h2>{activeDrag.column.title}</h2>
+            <section className="flex w-72 flex-col gap-2 rounded-xl border bg-muted/90 p-2.5 opacity-95 shadow-2xl">
+              <header className="flex items-center gap-2 px-1">
+                <GripVertical className="size-4 text-muted-foreground" />
+                <h2 className="truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  {activeDrag.column.title}
+                </h2>
               </header>
-              <div className="column-cards">
-                {(cardsByColumnBase.get(activeDrag.column.id) ?? []).slice(0, 5).map((c) => (
-                  <article key={c.id} className="card card-view">
-                    {c.title}
+              <div className="flex flex-col gap-2">
+                {(cardsByColumnBase.get(activeDrag.column.id) ?? []).slice(0, 5).map((card) => (
+                  <article key={card.id} className="rounded-lg border bg-card p-3 text-sm shadow-xs">
+                    {card.title}
                   </article>
                 ))}
               </div>
@@ -627,350 +669,9 @@ export function BoardPage() {
         </DragOverlay>
       </DndContext>
 
-      {notice && <div className="toast">{notice}</div>}
-    </main>
-  );
-}
-
-interface BoardTitleProps {
-  title: string;
-  canRename: boolean;
-  onRename: (title: string) => Promise<unknown>;
-  onError: (message: string) => void;
-}
-
-function BoardTitle(props: BoardTitleProps) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(props.title);
-
-  if (!editing) {
-    return (
-      <h1
-        className={props.canRename ? 'editable' : undefined}
-        title={props.canRename ? 'Переименовать' : undefined}
-        onClick={() => {
-          if (props.canRename) {
-            setValue(props.title);
-            setEditing(true);
-          }
-        }}
-      >
-        {props.title}
-      </h1>
-    );
-  }
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const title = value.trim();
-    if (!title) return;
-    try {
-      await props.onRename(title);
-      setEditing(false);
-    } catch (err) {
-      props.onError(errorText(err));
-    }
-  };
-
-  return (
-    <form
-      onSubmit={(e) => {
-        void submit(e);
-      }}
-    >
-      <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} onBlur={() => setEditing(false)} />
-    </form>
-  );
-}
-
-interface WsApi {
-  createColumn: (title: string) => void;
-  renameColumn: (columnId: string, title: string) => void;
-  deleteColumn: (columnId: string) => void;
-  createCard: (columnId: string, title: string) => void;
-  updateCard: (cardId: string, patch: { title?: string; description?: string | null }) => void;
-  moveCardToEnd: (cardId: string, toColumnId: string) => void;
-  deleteCard: (cardId: string) => void;
-  editingStart: (cardId: string) => void;
-  editingStop: (cardId: string) => void;
-}
-
-interface ColumnViewProps {
-  column: ColumnDto;
-  cards: CardDto[];
-  activeCardId: string | null;
-  columns: ColumnDto[];
-  ws: WsApi;
-  onError: (message: string) => void;
-  onNotice: (message: string) => void;
-  editingByCard: Record<string, string>;
-  members: UserDto[];
-}
-
-function ColumnView(props: ColumnViewProps) {
-  const { setNodeRef: setDragRef, listeners, attributes, isDragging } = useDraggable({
-    id: props.column.id,
-    data: { type: 'column' },
-  });
-  const { setNodeRef: setDropRef } = useDroppable({ id: props.column.id, data: { type: 'column' } });
-  const setNodeRef = useCallback(
-    (node: HTMLElement | null) => {
-      setDragRef(node);
-      setDropRef(node);
-    },
-    [setDragRef, setDropRef],
-  );
-
-  const [newCardTitle, setNewCardTitle] = useState('');
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleValue, setTitleValue] = useState(props.column.title);
-
-  const onCreateCard = (e: FormEvent) => {
-    e.preventDefault();
-    const title = newCardTitle.trim();
-    if (!title) return;
-    props.ws.createCard(props.column.id, title);
-    setNewCardTitle('');
-  };
-
-  const onRename = async (e: FormEvent) => {
-    e.preventDefault();
-    const title = titleValue.trim();
-    if (!title) return;
-    props.ws.renameColumn(props.column.id, title);
-    setEditingTitle(false);
-  };
-
-  const onDeleteColumn = async () => {
-    if (!window.confirm(`Удалить колонку «${props.column.title}» вместе с карточками?`)) return;
-    props.ws.deleteColumn(props.column.id);
-  };
-
-  return (
-    <section
-      ref={setNodeRef}
-      className={`column${isDragging ? ' dragging-column' : ''}`}
-      data-column-id={props.column.id}
-    >
-      <header className="column-header">
-        <span className="drag-handle" {...attributes} {...listeners}>
-          ⠿
-        </span>
-        {editingTitle ? (
-          <form
-            onSubmit={(e) => {
-              void onRename(e);
-            }}
-          >
-            <input
-              autoFocus
-              value={titleValue}
-              onChange={(e) => setTitleValue(e.target.value)}
-              onBlur={() => setEditingTitle(false)}
-            />
-          </form>
-        ) : (
-          <h2
-            className="editable"
-            onClick={() => {
-              setTitleValue(props.column.title);
-              setEditingTitle(true);
-            }}
-          >
-            {props.column.title}
-          </h2>
-        )}
-        <button type="button" className="link danger" onClick={() => void onDeleteColumn()}>
-          ✕
-        </button>
-      </header>
-
-      <div className="column-cards">
-        {props.cards.length === 0 && <p className="column-empty">Пусто. Перетащите карточку сюда.</p>}
-        {props.cards.map((card) =>
-          card.id === props.activeCardId ? (
-            // «Тень»: место, куда карточка встанет после дропа
-            <article key={card.id} className="card card-view dragging-ghost" data-card-id={card.id}>
-              {card.title}
-            </article>
-          ) : (
-            <CardView
-              key={card.id}
-              card={card}
-              ws={props.ws}
-              columns={props.columns}
-              onError={props.onError}
-              onNotice={props.onNotice}
-              editingBy={props.editingByCard[card.id] ?? null}
-              members={props.members}
-            />
-          ),
-        )}
-      </div>
-
-      <form
-        className="card-create"
-        onSubmit={(e) => {
-          onCreateCard(e);
-        }}
-      >
-        <input
-          type="text"
-          placeholder="+ карточка"
-          value={newCardTitle}
-          onChange={(e) => setNewCardTitle(e.target.value)}
-          maxLength={200}
-        />
-      </form>
-    </section>
-  );
-}
-
-interface CardViewProps {
-  card: CardDto;
-  ws: WsApi;
-  columns: ColumnDto[];
-  onError: (message: string) => void;
-  onNotice: (message: string) => void;
-  editingBy: string | null; // userId другого редактирующего
-  members: UserDto[];
-}
-
-function CardView(props: CardViewProps) {
-  const { attributes, listeners, setNodeRef } = useDraggable({
-    id: props.card.id,
-    data: { type: 'card' },
-  });
-
-  const [open, setOpen] = useState(false);
-  const [title, setTitle] = useState(props.card.title);
-  const [description, setDescription] = useState(props.card.description ?? '');
-  const [targetColumnId, setTargetColumnId] = useState(props.card.columnId);
-
-  const editorName = props.editingBy
-    ? (props.members.find((m) => m.id === props.editingBy)?.name ?? 'участник')
-    : null;
-
-  const openModal = () => {
-    setOpen(true);
-    setTitle(props.card.title);
-    setDescription(props.card.description ?? '');
-    setTargetColumnId(props.card.columnId);
-    props.ws.editingStart(props.card.id);
-  };
-
-  const closeModal = () => {
-    setOpen(false);
-    props.ws.editingStop(props.card.id);
-  };
-
-  const save = () => {
-    props.ws.updateCard(props.card.id, { title: title.trim(), description: description || null });
-    if (targetColumnId !== props.card.columnId) {
-      props.ws.moveCardToEnd(props.card.id, targetColumnId);
-      const columnTitle = props.columns.find((c) => c.id === targetColumnId)?.title;
-      props.onNotice(columnTitle ? `Карточка перемещена в «${columnTitle}»` : 'Карточка перемещена');
-    }
-    closeModal();
-  };
-
-  const remove = async () => {
-    if (!window.confirm('Удалить карточку?')) return;
-    props.ws.deleteCard(props.card.id);
-    closeModal();
-  };
-
-  return (
-    <>
-      <article
-        ref={setNodeRef}
-        className="card card-view"
-        data-card-id={props.card.id}
-        {...attributes}
-        {...listeners}
-        onClick={openModal}
-      >
-        {props.card.title}
-        {editorName && <span className="editing-badge">✏️ {editorName}</span>}
-      </article>
-
-      {open && (
-        <div className="modal-backdrop" onClick={closeModal}>
-          <div className="modal card" onClick={(e) => e.stopPropagation()}>
-            <label>
-              Заголовок
-              <input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} />
-            </label>
-            <label>
-              Описание
-              <textarea
-                rows={5}
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                maxLength={5000}
-              />
-            </label>
-            <label>
-              Колонка
-              <select value={targetColumnId} onChange={(e) => setTargetColumnId(e.target.value)}>
-                {props.columns.map((column) => (
-                  <option key={column.id} value={column.id}>
-                    {column.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="modal-actions">
-              <button type="button" onClick={save}>
-                Сохранить
-              </button>
-              <button type="button" className="danger" onClick={remove}>
-                Удалить
-              </button>
-              <button type="button" className="link" onClick={closeModal}>
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
+      {shareOpen && (
+        <ShareModal boardId={snapshot.board.id} members={snapshot.members} onClose={() => setShareOpen(false)} />
       )}
-    </>
-  );
-}
-
-interface NewColumnFormProps {
-  onCreate: (title: string) => void;
-}
-
-function NewColumnForm(props: NewColumnFormProps) {
-  const [title, setTitle] = useState('');
-
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    const t = title.trim();
-    if (!t) return;
-    try {
-      await props.onCreate(t);
-      setTitle('');
-    } catch {
-      setTitle('');
-    }
-  };
-
-  return (
-    <form
-      className="column new-column"
-      onSubmit={(e) => {
-        void submit(e);
-      }}
-    >
-      <input
-        type="text"
-        placeholder="+ колонка"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        maxLength={100}
-      />
-    </form>
+    </div>
   );
 }

@@ -1,19 +1,41 @@
 import { useEffect, useState } from 'react';
+import { Check, Copy, Link2, Plus, X } from 'lucide-react';
 import type { UserDto } from '@task-board/shared';
 import * as boardsApi from '../api/boards';
 import type { InviteDto } from '../api/boards';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
-/** Модалка шаринга (US-10–12): участники + invite-ссылки с копированием и отзывом. */
+function initials(name: string): string {
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+/** Шаринг (US-10–12): участники + invite-ссылки. */
 export function ShareModal(props: { boardId: string; members: UserDto[]; onClose: () => void }) {
   const [invites, setInvites] = useState<InviteDto[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const reload = () => {
     boardsApi
       .listInvites(props.boardId)
       .then((res) => setInvites(res.invites))
-      .catch((err) => setError(`${err.message ?? err}`));
+      .catch((err: Error) => setError(err.message));
   };
 
   useEffect(reload, [props.boardId]);
@@ -21,11 +43,15 @@ export function ShareModal(props: { boardId: string; members: UserDto[]; onClose
   const linkOf = (token: string) => `${window.location.origin}/join/${token}`;
 
   const create = async () => {
+    setBusy(true);
     try {
       const res = await boardsApi.createInvite(props.boardId);
       setInvites((prev) => [...(prev ?? []), res.invite]);
+      setError(null);
     } catch (err) {
-      setError(`${(err as Error).message}`);
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -34,7 +60,7 @@ export function ShareModal(props: { boardId: string; members: UserDto[]; onClose
       const res = await boardsApi.revokeInvite(invite.id);
       setInvites((prev) => (prev ?? []).map((i) => (i.id === invite.id ? res.invite : i)));
     } catch (err) {
-      setError(`${(err as Error).message}`);
+      setError((err as Error).message);
     }
   };
 
@@ -42,62 +68,119 @@ export function ShareModal(props: { boardId: string; members: UserDto[]; onClose
     try {
       await navigator.clipboard.writeText(linkOf(invite.token));
       setCopied(invite.id);
-      setTimeout(() => setCopied(null), 1500);
+      window.setTimeout(() => setCopied(null), 1500);
     } catch {
       window.prompt('Скопируйте ссылку вручную:', linkOf(invite.token));
     }
   };
 
   return (
-    <div className="modal-backdrop" onClick={props.onClose}>
-      <div className="modal card" onClick={(e) => e.stopPropagation()}>
-        <h1>Шаринг доски</h1>
+    <Dialog
+      open
+      onOpenChange={(value) => {
+        if (!value) props.onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Доступ к доске</DialogTitle>
+          <DialogDescription>Участники доски и ссылки-приглашения со сроком действия 7 дней.</DialogDescription>
+        </DialogHeader>
 
-        <h2 className="share-subtitle">Участники ({props.members.length})</h2>
-        <ul className="member-list">
-          {props.members.map((m) => (
-            <li key={m.id}>{m.name}</li>
-          ))}
-        </ul>
+        <div className="grid gap-5">
+          <section className="grid gap-2">
+            <h3 className="text-sm font-medium">Участники · {props.members.length}</h3>
+            <ul className="divide-y overflow-hidden rounded-lg border">
+              {props.members.map((member) => (
+                <li key={member.id} className="flex items-center gap-3 px-3 py-2">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
+                    {initials(member.name)}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">{member.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{member.email}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
 
-        <h2 className="share-subtitle">Ссылки-приглашения</h2>
-        {error && <p className="error">{error}</p>}
-        {invites === null ? (
-          <p className="empty">Загрузка…</p>
-        ) : (
-          <ul className="invite-list">
-            {invites.map((invite) => (
-              <li key={invite.id} className="invite-item">
-                {invite.revoked ? (
-                  <span className="invite-revoked">отозвана</span>
-                ) : (
-                  <>
-                    <span className="invite-link" title={linkOf(invite.token)}>
-                      {linkOf(invite.token).slice(0, 48)}…
-                    </span>
-                    <button type="button" className="link" onClick={() => void copy(invite)}>
-                      {copied === invite.id ? 'скопировано' : 'копировать'}
-                    </button>
-                    <button type="button" className="link danger" onClick={() => void revoke(invite)}>
-                      отозвать
-                    </button>
-                  </>
-                )}
-              </li>
-            ))}
-            {invites.length === 0 && <li className="empty">Ссылок ещё нет</li>}
-          </ul>
-        )}
+          <section className="grid gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-medium">Ссылки-приглашения</h3>
+              <Button size="sm" variant="outline" onClick={() => void create()} disabled={busy}>
+                <Plus className="size-4" />
+                Создать ссылку
+              </Button>
+            </div>
 
-        <div className="modal-actions">
-          <button type="button" onClick={() => void create()}>
-            Создать ссылку (7 дней)
-          </button>
-          <button type="button" className="link" onClick={props.onClose}>
-            Закрыть
-          </button>
+            {error && (
+              <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
+
+            {invites === null ? (
+              <div className="grid gap-2">
+                <Skeleton className="h-10 rounded-lg" />
+                <Skeleton className="h-10 rounded-lg" />
+              </div>
+            ) : invites.length === 0 ? (
+              <p className="rounded-lg border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
+                Ссылок пока нет. Создайте первую — и отправьте её коллеге.
+              </p>
+            ) : (
+              <ul className="grid gap-2">
+                {invites.map((invite) => (
+                  <li
+                    key={invite.id}
+                    className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 sm:flex-nowrap"
+                  >
+                    <Link2 className="size-4 shrink-0 text-muted-foreground" />
+                    {invite.revoked ? (
+                      <Badge variant="secondary" className="font-normal">
+                        ссылка отозвана
+                      </Badge>
+                    ) : (
+                      <>
+                        <span className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground" title={linkOf(invite.token)}>
+                          {linkOf(invite.token)}
+                        </span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          onClick={() => void copy(invite)}
+                        >
+                          {copied === invite.id ? <Check className="size-4" /> : <Copy className="size-4" />}
+                          {copied === invite.id ? 'Скопировано' : 'Копировать'}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-destructive hover:text-destructive"
+                          onClick={() => void revoke(invite)}
+                        >
+                          <X className="size-4" />
+                          Отозвать
+                        </Button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         </div>
-      </div>
-    </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={props.onClose}>
+            Закрыть
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -35,6 +35,12 @@ coverage/
 .eslintcache
 .vite/
 
+# --- Playwright ---
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
 # --- Локальные заметки (тестовые аккаунты, порты) ---
 DEV_NOTES.md
 
