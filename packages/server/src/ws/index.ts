@@ -26,6 +26,7 @@ import { boardAccess, snapshot, cardAccess, cardDto, columnAccess, columnDto, no
 import { COOKIE_NAME, verifySessionToken } from '../http/session';
 import { HttpError } from '../http/errors';
 import { moveCard, moveColumn, nextCardPosition, nextColumnPosition } from '../services/positions';
+import { userRoom } from './emit';
 
 type Io = IOServer<ClientToServerEvents, ServerToClientEvents>;
 type Sock = Socket<ClientToServerEvents, ServerToClientEvents, SocketData>;
@@ -122,6 +123,8 @@ export function registerSocketHandlers(io: Io): void {
   io.on('connection', (socket) => {
     const data = socket.data as SocketData;
     const editingCards = new Set<string>(); // карточки, редактируемые этим сокетом
+    // Личная комната: позволяет разорвать все сокеты пользователя при выходе/смене пароля
+    socket.join(userRoom(data.userId));
 
     socket.on('board:join', async (raw) => {
       try {

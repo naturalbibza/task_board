@@ -6,7 +6,8 @@ import { loginSchema, registerSchema } from '@task-board/shared';
 import { db } from '../db';
 import { users } from '../db/schema';
 import { HttpError } from './errors';
-import { clearSessionCookie, requireUserId, setSessionCookie, toUserDto } from './session';
+import { clearSessionCookie, requireUserId, setSessionCookie, toUserDto, COOKIE_NAME, verifySessionToken } from './session';
+import { disconnectUser } from '../ws/emit';
 
 export const authRouter = Router();
 
@@ -53,8 +54,13 @@ const login: RequestHandler = async (req, res: Response) => {
   res.json({ user: toUserDto(user) });
 };
 
-const logout: RequestHandler = (_req, res) => {
+const logout: RequestHandler = async (req, res) => {
+  const token = (req.cookies as Record<string, string | undefined>)?.[COOKIE_NAME];
+  const session = token ? await verifySessionToken(token) : null;
   clearSessionCookie(res);
+  // Сокет аутентифицирован в handshake: без разрыва он продолжит работать от прежнего
+  // пользователя после входа под другим аккаунтом (смена ролей не применилась бы).
+  if (session) disconnectUser(session.userId);
   res.json({ ok: true });
 };
 
@@ -67,6 +73,9 @@ const logoutAll: RequestHandler = async (req, res) => {
     .where(eq(users.id, userId))
     .returning();
   await setSessionCookie(res, user.id, user.tokenVersion);
+  // После ответа (cookie уже обновлена) рвём все сокеты: текущий переподключится
+  // с новым токеном, остальные — со старым и получат 401.
+  res.on('finish', () => disconnectUser(userId));
   res.json({ ok: true });
 };
 

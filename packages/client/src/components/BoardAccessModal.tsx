@@ -55,11 +55,16 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
   useEffect(() => setMembers(props.members), [props.members]);
 
   useEffect(() => {
+    // Ссылки видят и создают только владелец/админ; остальным запрос вернул бы 403
+    if (!can(props.myRole, 'invite')) {
+      setInvites([]);
+      return;
+    }
     boardsApi
       .listInvites(props.boardId)
       .then((res) => setInvites(res.invites))
       .catch((err: Error) => setError(err.message));
-  }, [props.boardId]);
+  }, [props.boardId, props.myRole]);
 
   const canManage = can(props.myRole, 'manageMembers');
   const canAssignAdmin = can(props.myRole, 'assignAdmin');
@@ -256,9 +261,10 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
             </ul>
           </section>
 
-          <section className="grid min-w-0 gap-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-medium">Ссылки-приглашения</h3>
+          {canInvite && (
+            <section className="grid min-w-0 gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-medium">Ссылки-приглашения</h3>
               {canInvite && (
                 <div className="flex flex-wrap items-center gap-2">
                   <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as AssignableRole)}>
@@ -345,7 +351,8 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
                 ))}
               </ul>
             )}
-          </section>
+            </section>
+          )}
         </div>
 
         <DialogFooter>

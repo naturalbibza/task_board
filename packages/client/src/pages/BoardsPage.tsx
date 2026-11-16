@@ -97,7 +97,7 @@ export function BoardsPage() {
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-9 gap-2 px-2">
+                <Button variant="ghost" className="h-9 gap-2 px-2" aria-label="Меню пользователя">
                   <span className="flex size-6 items-center justify-center rounded-full bg-secondary text-xs font-semibold">
                     {initials}
                   </span>

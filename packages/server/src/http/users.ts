@@ -8,6 +8,7 @@ import { db } from '../db';
 import { users } from '../db/schema';
 import { HttpError } from './errors';
 import { requireUserId, setSessionCookie } from './session';
+import { disconnectUser } from '../ws/emit';
 
 export const usersRouter = Router();
 
@@ -69,6 +70,9 @@ const changePassword: RequestHandler = async (req, res) => {
 
   // Прочие сессии инвалидированы, текущая продолжает работать
   await setSessionCookie(res, updated.id, updated.tokenVersion);
+  // Рвём сокеты после ответа: текущий переподключится с новым токеном,
+  // остальные — со старым и получат 401
+  res.on('finish', () => disconnectUser(userId));
   res.json({ ok: true });
 };
 
