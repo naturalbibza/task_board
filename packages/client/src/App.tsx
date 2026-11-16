@@ -3,6 +3,7 @@ import { BoardsPage } from './pages/BoardsPage';
 import { BoardPage } from './pages/BoardPage';
 import { JoinPage } from './pages/JoinPage';
 import { LoginPage } from './pages/LoginPage';
+import { ProfilePage } from './pages/ProfilePage';
 import { RegisterPage } from './pages/RegisterPage';
 
 export function App() {
@@ -13,6 +14,7 @@ export function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/boards" element={<BoardsPage />} />
       <Route path="/boards/:id" element={<BoardPage />} />
+      <Route path="/profile" element={<ProfilePage />} />
       {/* Invite-ссылки (FR-15): /join/:token работает и для неавторизованных */}
       <Route path="/join/:token" element={<JoinPage />} />
       <Route path="*" element={<Navigate to="/boards" replace />} />

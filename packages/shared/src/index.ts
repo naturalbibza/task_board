@@ -4,4 +4,5 @@
 export * from './env';
 export * from './api-types';
 export * from './permissions';
+export * from './labels';
 export * from './ws-events';

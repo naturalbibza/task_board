@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { LayoutGrid, LogOut, Plus, Trash2 } from 'lucide-react';
+import { LayoutGrid, LogOut, Plus, Trash2, UserRound } from 'lucide-react';
 import type { BoardDto } from '@task-board/shared';
 import { BOARD_ROLE_LABELS } from '@task-board/shared';
 import { toast } from 'sonner';
@@ -109,6 +109,11 @@ export function BoardsPage() {
                   <div className="text-sm font-medium">{user.name}</div>
                   <div className="truncate text-xs text-muted-foreground">{user.email}</div>
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => navigate('/profile')}>
+                  <UserRound className="size-4" />
+                  Профиль
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => void logout()}>
                   <LogOut className="size-4" />

@@ -9,13 +9,27 @@ type AuthValue = {
   login: (email: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthValue | null>(null);
 
+/**
+ * user: null без ошибки — тихий 401 для анонима (10.2).
+ * refresh(): перечитывает пользователя, например после смены имени в профиле.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserDto | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const refresh = async () => {
+    try {
+      const res = await authApi.me();
+      setUser(res.user);
+    } catch {
+      setUser(null);
+    }
+  };
 
   useEffect(() => {
     authApi
@@ -28,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthValue = {
     user,
     loading,
+    refresh,
     login: async (email, password) => {
       const res = await authApi.login({ email, password });
       setUser(res.user);

@@ -132,13 +132,15 @@ CLI `db:migrate`, и старт сервера. Проверено на чист
 | `PATCH /api/boards/:id/members/:userId` | `{ role }` (владелец; назначение ADMIN — только владелец) |
 | `DELETE /api/boards/:id/members/:userId` | владелец/админ, кроме владельца |
 | `POST /api/boards/:id/invites` | + `role`, + `email` (приглашение по адресу) |
-| `GET/PATCH /api/users/me` | профиль: имя, описание, телефон, мессенджеры, статус email |
-| `GET /api/users/:id` | контакты (если есть общая доска) |
+| `GET/PATCH /api/users/me` | профиль: имя, описание, телефон, мессенджеры |
 | `POST /api/users/me/password` | `{ currentPassword, newPassword }` → инкремент `tokenVersion` |
 | `POST /api/auth/logout-all` | инкремент `tokenVersion`, сброс cookie |
 | `POST /api/auth/verify-email` | `{ token }` |
 | `POST /api/auth/resend-verification` | лимит 1/мин |
 | `GET/POST /api/column-templates`, `DELETE /api/column-templates/:id` | шаблоны колонок |
+
+Контакты участников приходят в `BoardSnapshot.members` (`MemberDto`): снапшот доступен
+только участникам доски, поэтому отдельный `GET /users/:id` не нужен.
 
 JWT: добавляется claim `ver` (tokenVersion). `requireUserId` и WS-handshake сверяют его
 с `users.token_version` — так работают смена пароля и «выйти везде».

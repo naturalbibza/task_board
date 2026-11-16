@@ -105,10 +105,10 @@ export function registerSocketHandlers(io: Io): void {
   io.use(async (socket, next) => {
     try {
       const token = parseCookie(socket.handshake.headers.cookie ?? '', COOKIE_NAME);
-      const userId = token ? await verifySessionToken(token) : null;
-      if (!userId) return next(new Error('UNAUTHORIZED'));
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      if (!user) return next(new Error('UNAUTHORIZED'));
+      const session = token ? await verifySessionToken(token) : null;
+      if (!session) return next(new Error('UNAUTHORIZED'));
+      const [user] = await db.select().from(users).where(eq(users.id, session.userId));
+      if (!user || user.tokenVersion !== session.version) return next(new Error('UNAUTHORIZED'));
       const data = socket.data as SocketData;
       data.userId = user.id;
       data.name = user.name;

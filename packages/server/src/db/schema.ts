@@ -1,5 +1,17 @@
-import { doublePrecision, index, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { randomUUID } from 'node:crypto';
+import type { MessengerContact } from '@task-board/shared';
 
 const id = () =>
   text()
@@ -14,6 +26,11 @@ export const users = pgTable('users', {
   email: text().notNull().unique(),
   passwordHash: text().notNull(),
   name: text().notNull(),
+  description: text(),
+  phone: text(),
+  messengers: jsonb().$type<MessengerContact[]>(),
+  // Инвалидация сессий: смена пароля и «выйти везде» увеличивают версию (FR-30, FR-33)
+  tokenVersion: integer().notNull().default(0),
   createdAt: ts().notNull().defaultNow(),
 });
 

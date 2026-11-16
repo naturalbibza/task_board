@@ -8,6 +8,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { env } from './db';
 import { authRouter } from './http/auth';
 import { boardsRouter } from './http/boards';
+import { usersRouter } from './http/users';
 import { createInvite, invitesRouter, joinRouter, listInvites } from './http/invites';
 import { errorHandler } from './http/errors';
 import { registerSocketHandlers } from './ws';
@@ -24,6 +25,7 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api/users', usersRouter);
 app.use('/api/boards', boardsRouter);
 boardsRouter.get('/:id/invites', listInvites);
 boardsRouter.post("/:id/invites", createInvite);

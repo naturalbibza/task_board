@@ -72,5 +72,21 @@ await page.goto('/boards');
 await clean();
 await page.screenshot({ path: `${OUT}/06-boards-list-dark.png` });
 
+await page.goto('/profile');
+await page.getByLabel('Имя').fill('Анна Тестер');
+await page.getByLabel('О себе').fill('Фронтенд и немного бэкенда. Люблю аккуратные интерфейсы.');
+await page.getByLabel('Телефон').fill('+7 900 123-45-67');
+await page.getByRole('button', { name: 'Добавить контакт' }).click();
+await page.getByLabel('Контакт', { exact: true }).fill('@anna_dev');
+await page.getByRole('button', { name: 'Сохранить' }).click();
+await page.waitForTimeout(400);
+await clean();
+await page.screenshot({ path: `${OUT}/07-profile-dark.png` });
+
+await page.getByRole('button', { name: 'Тема оформления' }).click();
+await page.getByRole('menuitem', { name: 'Светлая' }).click();
+await clean();
+await page.screenshot({ path: `${OUT}/08-profile-light.png` });
+
 await browser.close();
 console.log('screenshots saved to docs/screenshots/v2');

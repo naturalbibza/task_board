@@ -36,12 +36,34 @@ export type BoardDto = {
   role: BoardRole;
 };
 
-/** Участник доски с ролью (v2). */
+/** Участник доски с ролью и контактами (v2). Контакты видят только участники доски. */
 export type MemberDto = {
   id: string;
   name: string;
   email: string;
   role: BoardRole;
+  description: string | null;
+  phone: string | null;
+  messengers: MessengerContact[];
+};
+
+/** Контакт в мессенджере (FR-28): тип + значение, всё опционально. */
+export type MessengerType = 'telegram' | 'whatsapp' | 'other';
+
+export type MessengerContact = {
+  type: MessengerType;
+  value: string;
+};
+
+/** Профиль в личном кабинете (FR-28). */
+export type UserProfileDto = {
+  id: string;
+  email: string;
+  name: string;
+  description: string | null;
+  phone: string | null;
+  messengers: MessengerContact[];
+  createdAt: string;
 };
 
 export type ColumnDto = {
@@ -111,6 +133,30 @@ export type InviteDto = {
   revoked: boolean;
   role: 'ADMIN' | 'EDITOR' | 'VIEWER';
 };
+
+// --- Аккаунт (v2, фаза 13) ---
+
+export const messengerTypeSchema = z.enum(['telegram', 'whatsapp', 'other']);
+
+export const updateProfileSchema = z.object({
+  name: z.string().trim().min(1, 'Имя не может быть пустым').max(50, 'Не длиннее 50 символов').optional(),
+  description: z.string().max(500, 'Не длиннее 500 символов').nullable().optional(),
+  phone: z.string().max(50, 'Не длиннее 50 символов').nullable().optional(),
+  messengers: z
+    .array(
+      z.object({
+        type: messengerTypeSchema,
+        value: z.string().trim().min(1, 'Укажите контакт').max(100, 'Не длиннее 100 символов'),
+      }),
+    )
+    .max(5, 'Не больше 5 контактов')
+    .optional(),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Введите текущий пароль'),
+  newPassword: z.string().min(8, 'Пароль должен быть не короче 8 символов'),
+});
 
 // --- Общие контрактные типы (NFR-8: единый формат ошибок) ---
 

@@ -101,7 +101,15 @@ export function cardDto(card: typeof cards.$inferSelect): CardDto {
 }
 
 function memberDto(user: typeof users.$inferSelect, role: DbRole): MemberDto {
-  return { id: user.id, name: user.name, email: user.email, role: normalizeRole(role) };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: normalizeRole(role),
+    description: user.description,
+    phone: user.phone,
+    messengers: user.messengers ?? [],
+  };
 }
 
 /** Полный снапшот доски (FR-9: тот же формат у WS board:state). */

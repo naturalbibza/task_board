@@ -1,11 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, Link2, Plus, UserMinus, X } from 'lucide-react';
-import { BOARD_ROLE_LABELS, can, type BoardRole, type InviteDto, type MemberDto } from '@task-board/shared';
+import { Check, Contact, Copy, Link2, MessageCircle, Phone, Plus, UserMinus, X } from 'lucide-react';
+import {
+  BOARD_ROLE_LABELS,
+  MESSENGER_LABELS,
+  can,
+  type BoardRole,
+  type InviteDto,
+  type MemberDto,
+} from '@task-board/shared';
 import * as boardsApi from '../api/boards';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Dialog,
   DialogContent,
@@ -163,6 +171,50 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
                     </div>
 
                     <div className="ml-auto flex shrink-0 items-center gap-1">
+                      {(member.description || member.phone || member.messengers.length > 0) && (
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="size-8 text-muted-foreground"
+                              aria-label={`Контакты ${member.name}`}
+                            >
+                              <Contact className="size-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-72">
+                            <div className="grid gap-2 text-sm">
+                              <div>
+                                <div className="font-medium">{member.name}</div>
+                                <div className="truncate text-xs text-muted-foreground">{member.email}</div>
+                              </div>
+                              {member.description && (
+                                <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                                  {member.description}
+                                </p>
+                              )}
+                              {member.phone && (
+                                <div className="flex items-center gap-2">
+                                  <Phone className="size-3.5 shrink-0 text-muted-foreground" />
+                                  <span>{member.phone}</span>
+                                </div>
+                              )}
+                              {member.messengers.map((messenger, index) => (
+                                <div key={`${messenger.type}-${index}`} className="flex min-w-0 items-center gap-2">
+                                  <MessageCircle className="size-3.5 shrink-0 text-muted-foreground" />
+                                  <span className="shrink-0 text-muted-foreground">
+                                    {MESSENGER_LABELS[messenger.type]}:
+                                  </span>
+                                  <span className="min-w-0 break-all">{messenger.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
+                      )}
+
                       {roleLocked ? (
                         <Badge variant={isOwnerRow ? 'default' : 'secondary'} className="font-normal">
                           {BOARD_ROLE_LABELS[member.role]}
