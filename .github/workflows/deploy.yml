@@ -7,6 +7,11 @@ on:
   push:
     branches:
       - main
+    # Доки и спецификации не влияют на образ — не гоняем сборку и деплой
+    paths-ignore:
+      - '**.md'
+      - 'specs/**'
+      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
@@ -38,7 +43,10 @@ jobs:
       - name: Upload sources
         shell: bash
         run: |
-          tar --exclude=./.git \
+          # Фиксированный mtime: слой COPY манифестов в Dockerfile попадает в кэш,
+          # поэтому pnpm install не перезапускается на каждый деплой
+          tar --mtime='2020-01-01' \
+              --exclude=./.git \
               --exclude=./.idea \
               --exclude=./node_modules \
               --exclude=./dist \

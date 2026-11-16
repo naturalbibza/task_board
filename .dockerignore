@@ -10,3 +10,7 @@ dist
 !.env.example
 DEV_NOTES.md
 specs
+**/.localdb
+**/.localmail
+e2e/test-results
+e2e/playwright-report

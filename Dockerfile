@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1.7
 # --- Сборка: зависимости всех пакетов + сборка клиента ---
 FROM node:20-alpine AS build
 RUN npm install -g pnpm@10
@@ -8,7 +9,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/client/package.json packages/client/package.json
-RUN pnpm install --frozen-lockfile
+# Кэш pnpm-store между сборками: пакеты не скачиваются заново
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # Затем исходники и сборка клиентского бандла
 COPY . .
