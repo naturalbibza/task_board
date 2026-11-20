@@ -1,4 +1,4 @@
-import type { PresenceUser, UserDto } from '@task-board/shared';
+import type { MemberDto, PresenceUser } from '@task-board/shared';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 function initials(name: string): string {
@@ -7,7 +7,7 @@ function initials(name: string): string {
 }
 
 /** Presence: аватары тех, кто сейчас на доске (FR-14). */
-export function MembersBar(props: { online: PresenceUser[]; members: UserDto[] }) {
+export function MembersBar(props: { online: PresenceUser[]; members: MemberDto[] }) {
   const online = props.online;
   if (online.length === 0) return null;
 

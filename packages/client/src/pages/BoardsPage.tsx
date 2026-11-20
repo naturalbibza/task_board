@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Logo } from '@/components/logo';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { EmailVerificationBanner } from '@/components/EmailVerificationBanner';
 
 export function BoardsPage() {
   const { user, loading, logout } = useAuth();
@@ -125,31 +126,39 @@ export function BoardsPage() {
         </div>
       </header>
 
+      <EmailVerificationBanner />
+
       <main className="mx-auto max-w-5xl px-4 py-8">
         <div className="mb-6 space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">Мои доски</h1>
           <p className="text-sm text-muted-foreground">Создавайте доски, приглашайте участников и работайте вместе.</p>
         </div>
 
-        <form
-          className="mb-6 flex flex-col gap-2 sm:flex-row"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void onCreate();
-          }}
-        >
-          <Input
-            placeholder="Название новой доски"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            maxLength={100}
-            aria-label="Название новой доски"
-          />
-          <Button type="submit" disabled={creating || !newTitle.trim()}>
-            <Plus className="size-4" />
-            Создать доску
-          </Button>
-        </form>
+        {user.emailVerified ? (
+          <form
+            className="mb-6 flex flex-col gap-2 sm:flex-row"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void onCreate();
+            }}
+          >
+            <Input
+              placeholder="Название новой доски"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.target.value)}
+              maxLength={100}
+              aria-label="Название новой доски"
+            />
+            <Button type="submit" disabled={creating || !newTitle.trim()}>
+              <Plus className="size-4" />
+              Создать доску
+            </Button>
+          </form>
+        ) : (
+          <p className="mb-6 rounded-lg border border-dashed px-3 py-4 text-sm text-muted-foreground">
+            Чтобы создавать доски, подтвердите email — письмо отправлено при регистрации.
+          </p>
+        )}
 
         {error && (
           <p role="alert" className="mb-4 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">

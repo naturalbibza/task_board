@@ -29,10 +29,31 @@ export const users = pgTable('users', {
   description: text(),
   phone: text(),
   messengers: jsonb().$type<MessengerContact[]>(),
+  // Подтверждение email (v2, фаза 14): null — адрес ещё не подтверждён
+  emailVerifiedAt: ts(),
   // Инвалидация сессий: смена пароля и «выйти везде» увеличивают версию (FR-30, FR-33)
   tokenVersion: integer().notNull().default(0),
   createdAt: ts().notNull().defaultNow(),
 });
+
+/** Одноразовые токены подтверждения email: в БД хранится только sha256-хэш. */
+export const emailVerifications = pgTable(
+  'email_verifications',
+  {
+    id: id(),
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text().notNull(),
+    expiresAt: ts().notNull(),
+    usedAt: ts(),
+    createdAt: ts().notNull().defaultNow(),
+  },
+  (t) => [
+    index('email_verifications_token_idx').on(t.tokenHash),
+    index('email_verifications_user_idx').on(t.userId),
+  ],
+);
 
 export const boards = pgTable('boards', {
   id: id(),
@@ -107,6 +128,8 @@ export const invites = pgTable(
       .references(() => boards.id, { onDelete: 'cascade' }),
     token: text().notNull().unique(), // ≥ 32 случайных символа (FR-16)
     role: roleEnum().notNull().default('EDITOR'), // роль при вступлении (v2, FR-25)
+    // Приглашение по email (v2, FR-26): вступить сможет только этот адрес
+    email: text(),
     expiresAt: ts().notNull(),
     revokedAt: ts(),
     createdBy: text()

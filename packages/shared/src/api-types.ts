@@ -21,6 +21,8 @@ export type UserDto = {
   id: string;
   email: string;
   name: string;
+  /** Подтверждён ли email (v2, фаза 14): false — ограниченный режим (FR-32). */
+  emailVerified: boolean;
 };
 
 // --- Доски и контент (фаза 5) ---
@@ -124,6 +126,8 @@ export const inviteRoleSchema = z.enum(['ADMIN', 'EDITOR', 'VIEWER']);
 
 export const createInviteSchema = z.object({
   role: inviteRoleSchema.optional(),
+  // Приглашение на конкретный адрес (FR-26): вступить сможет только он
+  email: z.email('Некорректный email').optional(),
 });
 
 export type InviteDto = {
@@ -132,7 +136,14 @@ export type InviteDto = {
   expiresAt: string;
   revoked: boolean;
   role: 'ADMIN' | 'EDITOR' | 'VIEWER';
+  /** Приглашение на конкретный адрес (v2, FR-26). */
+  email: string | null;
 };
+
+/** Подтверждение email по токену из письма (v2, фаза 14). */
+export const verifyEmailSchema = z.object({
+  token: z.string().min(16, 'Некорректная ссылка'),
+});
 
 // --- Аккаунт (v2, фаза 13) ---
 

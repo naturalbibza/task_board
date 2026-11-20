@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { RegisterInput, UserDto } from '@task-board/shared';
 import * as authApi from '../api/auth';
 import { ApiClientError } from '../api/http';
@@ -22,14 +22,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserDto | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       const res = await authApi.me();
       setUser(res.user);
     } catch {
       setUser(null);
     }
-  };
+  }, []);
 
   useEffect(() => {
     authApi

@@ -1,15 +1,35 @@
 import { Router } from 'express';
-import { eq, sql } from 'drizzle-orm';
+import { createHash, randomBytes } from 'node:crypto';
+import { desc, eq, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import type { RequestHandler, Response } from 'express';
-import { loginSchema, registerSchema } from '@task-board/shared';
+import type { Request, RequestHandler, Response } from 'express';
+import { loginSchema, registerSchema, verifyEmailSchema } from '@task-board/shared';
 import { db } from '../db';
-import { users } from '../db/schema';
+import { emailVerifications, users } from '../db/schema';
 import { HttpError } from './errors';
 import { clearSessionCookie, requireUserId, setSessionCookie, toUserDto, COOKIE_NAME, verifySessionToken } from './session';
 import { disconnectUser } from '../ws/emit';
+import { baseUrl, sendMailSafely } from '../mail/mailer';
+import { verifyEmailMessage } from '../mail/templates';
 
 export const authRouter = Router();
+
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+const RESEND_INTERVAL_MS = 60 * 1000;
+
+/** Создаёт одноразовый токен (в БД — только хэш) и отправляет письмо со ссылкой. */
+async function sendVerification(req: Request, user: typeof users.$inferSelect): Promise<void> {
+  const token = randomBytes(32).toString('base64url');
+  await db.insert(emailVerifications).values({
+    userId: user.id,
+    tokenHash: sha256(token),
+    expiresAt: new Date(Date.now() + VERIFY_TTL_MS),
+  });
+  const link = `${baseUrl(req)}/verify-email?token=${token}`;
+  await sendMailSafely({ to: user.email, ...verifyEmailMessage(user.name, link) });
+}
 
 /** Код ошибки PostgreSQL ищем по всей цепочке cause (Drizzle заворачивает ошибки драйвера). */
 function pgErrorCode(err: unknown): string | undefined {
@@ -35,6 +55,8 @@ const register: RequestHandler = async (req, res: Response) => {
   try {
     const [user] = await db.insert(users).values({ email, passwordHash, name }).returning();
     await setSessionCookie(res, user.id, user.tokenVersion);
+    // Письмо подтверждения — в фоне, регистрацию не задерживаем
+    void sendVerification(req, user).catch((err) => console.error('[mail] подтверждение:', err));
     res.status(201).json({ user: toUserDto(user) });
   } catch (err) {
     if (isUniqueViolation(err)) {
@@ -88,8 +110,64 @@ const me: RequestHandler = async (req, res) => {
   res.json({ user: toUserDto(user) });
 };
 
+/** Подтверждение email по токену из письма (FR-31). Идемпотентно: повторное открытие ссылки — успех. */
+const verifyEmail: RequestHandler = async (req, res) => {
+  const { token } = verifyEmailSchema.parse(req.body);
+  const [row] = await db
+    .select()
+    .from(emailVerifications)
+    .where(eq(emailVerifications.tokenHash, sha256(token)))
+    .limit(1);
+  if (!row) {
+    throw new HttpError(400, 'VERIFICATION_INVALID', 'Ссылка недействительна или истекла');
+  }
+  const [user] = await db.select().from(users).where(eq(users.id, row.userId));
+  if (!user) {
+    throw new HttpError(400, 'VERIFICATION_INVALID', 'Ссылка недействительна или истекла');
+  }
+  // Уже подтверждён (в т.ч. двойным запросом из StrictMode/превью почтового клиента)
+  if (user.emailVerifiedAt) {
+    res.json({ ok: true, alreadyVerified: true });
+    return;
+  }
+  if (row.usedAt || row.expiresAt < new Date()) {
+    throw new HttpError(400, 'VERIFICATION_INVALID', 'Ссылка недействительна или истекла');
+  }
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ emailVerifiedAt: new Date() }).where(eq(users.id, row.userId));
+    await tx.update(emailVerifications).set({ usedAt: new Date() }).where(eq(emailVerifications.id, row.id));
+  });
+  res.json({ ok: true });
+};
+
+/** Повторная отправка письма: не чаще 1 раза в минуту (FR-38). */
+const resendVerification: RequestHandler = async (req, res) => {
+  const userId = await requireUserId(req);
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  if (!user) {
+    throw new HttpError(401, 'UNAUTHORIZED', 'Требуется вход');
+  }
+  if (user.emailVerifiedAt) {
+    res.json({ ok: true, alreadyVerified: true });
+    return;
+  }
+  const [last] = await db
+    .select()
+    .from(emailVerifications)
+    .where(eq(emailVerifications.userId, userId))
+    .orderBy(desc(emailVerifications.createdAt))
+    .limit(1);
+  if (last && Date.now() - last.createdAt.getTime() < RESEND_INTERVAL_MS) {
+    throw new HttpError(429, 'RATE_LIMITED', 'Письмо уже отправлено — подождите минуту');
+  }
+  await sendVerification(req, user);
+  res.json({ ok: true });
+};
+
 authRouter.post('/register', register);
 authRouter.post('/login', login);
 authRouter.post('/logout', logout);
 authRouter.post('/logout-all', logoutAll);
 authRouter.get('/me', me);
+authRouter.post('/verify-email', verifyEmail);
+authRouter.post('/resend-verification', resendVerification);

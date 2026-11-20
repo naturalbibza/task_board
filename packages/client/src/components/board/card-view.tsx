@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useDraggable } from '@dnd-kit/core';
-import type { CardDto, ColumnDto, UserDto } from '@task-board/shared';
+import type { CardDto, ColumnDto, MemberDto } from '@task-board/shared';
 import type { WsApi } from './types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,7 +24,7 @@ interface CardViewProps {
   columns: ColumnDto[];
   onNotice: (message: string) => void;
   editingBy: string | null; // userId другого редактирующего
-  members: UserDto[];
+  members: MemberDto[];
   readOnly?: boolean;
 }
 

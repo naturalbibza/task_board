@@ -82,5 +82,5 @@ export async function requireUserId(
 }
 
 export function toUserDto(user: User): UserDto {
-  return { id: user.id, name: user.name, email: user.email };
+  return { id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerifiedAt !== null };
 }

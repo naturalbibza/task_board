@@ -58,10 +58,11 @@ export function listInvites(boardId: string): Promise<{ invites: InviteDto[] }> 
 export function createInvite(
   boardId: string,
   role: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR',
+  email?: string,
 ): Promise<{ invite: InviteDto }> {
   return api<{ invite: InviteDto }>(`/boards/${boardId}/invites`, {
     method: 'POST',
-    body: JSON.stringify({ role }),
+    body: JSON.stringify(email ? { role, email } : { role }),
   });
 }
 

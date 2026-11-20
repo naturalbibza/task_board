@@ -1,7 +1,7 @@
 import { useCallback, useState, type FormEvent } from 'react';
 import { GripVertical, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import type { CardDto, ColumnDto, UserDto } from '@task-board/shared';
+import type { CardDto, ColumnDto, MemberDto } from '@task-board/shared';
 import { cn } from '@/lib/utils';
 import type { WsApi } from './types';
 import { CardView } from './card-view';
@@ -22,7 +22,7 @@ interface ColumnViewProps {
   ws: WsApi;
   onNotice: (message: string) => void;
   editingByCard: Record<string, string>;
-  members: UserDto[];
+  members: MemberDto[];
   readOnly?: boolean;
 }
 

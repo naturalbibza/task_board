@@ -1,21 +1,13 @@
 import { test, expect, type Page } from '@playwright/test';
+import { registerAndVerify, uniqueEmail } from './helpers';
 
 /**
  * Матрица ролей (FR-23): VIEWER только смотрит, EDITOR редактирует,
  * смена роли применяется на лету (member:updated по WS).
  */
 
-let counter = 0;
-const uniqueEmail = (tag: string) => `e2e-${tag}-${Date.now()}-${counter++}@test.dev`;
-
 async function register(page: Page, tag: string): Promise<void> {
-  await page.goto('/register');
-  await page.getByLabel('Email').fill(uniqueEmail(tag));
-  await page.getByLabel('Имя').fill(`E2E ${tag}`);
-  await page.getByLabel('Пароль (минимум 8 символов)').fill('password123');
-  await page.getByLabel('Повторите пароль').fill('password123');
-  await page.getByRole('button', { name: 'Создать аккаунт' }).click();
-  await expect(page).toHaveURL(/\/boards$/);
+  await registerAndVerify(page, uniqueEmail(tag), `E2E ${tag}`);
 }
 
 test('роли: VIEWER не редактирует, после смены на EDITOR — редактирует', async ({ browser, page }) => {

@@ -50,6 +50,20 @@
       "when": 1794840035288,
       "tag": "0006_v2-account-profile",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794848772758,
+      "tag": "0007_v2-email",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1794848774000,
+      "tag": "0008_v2-email-backfill",
+      "breakpoints": true
     }
   ]
 }

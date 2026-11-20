@@ -25,6 +25,7 @@ import { errorText, useAuth } from '../state/auth-context';
 import { cn } from '@/lib/utils';
 import { MembersBar } from '@/components/MembersBar';
 import { BoardAccessModal } from '@/components/BoardAccessModal';
+import { EmailVerificationBanner } from '@/components/EmailVerificationBanner';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { BoardTitle } from '@/components/board/board-title';
 import { ColumnView } from '@/components/board/column-view';
@@ -640,6 +641,8 @@ export function BoardPage() {
           </div>
         </div>
       </header>
+
+      <EmailVerificationBanner />
 
       <DndContext
         sensors={sensors}

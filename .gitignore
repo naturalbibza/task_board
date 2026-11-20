@@ -18,6 +18,9 @@ build/
 packages/server/.localdb/
 packages/server/.localdb.jwt
 
+# --- Письма в dev/e2e (консольный транспорт) ---
+packages/server/.localmail/
+
 # --- Логи ---
 logs/
 *.log

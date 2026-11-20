@@ -22,7 +22,7 @@ import { emitToBoard } from '../ws/emit';
 
 export const boardsRouter = Router();
 
-type Access = { boardId: string; title: string; role: BoardRole };
+type Access = { boardId: string; title: string; role: BoardRole; verified: boolean };
 type DbRole = typeof boardMembers.$inferSelect['role'];
 
 /** В БД enum хранит legacy-значение MEMBER (v1) — наружу отдаём только 4 роли (v2). */
@@ -37,17 +37,43 @@ export function requirePermission(role: BoardRole, action: BoardAction): void {
   }
 }
 
+/**
+ * Право + ограничения неподтверждённого email (FR-32): нельзя приглашать и управлять
+ * участниками; нельзя редактировать содержимое чужих досок. Свои доски — можно.
+ */
+export function requireAction(access: Access, action: BoardAction): void {
+  requirePermission(access.role, action);
+  if (access.verified) return;
+  if (action === 'invite' || action === 'manageMembers') {
+    throw new HttpError(403, 'EMAIL_NOT_VERIFIED', 'Подтвердите email, чтобы управлять участниками доски');
+  }
+  if (action === 'editContent' && access.role !== 'OWNER') {
+    throw new HttpError(403, 'EMAIL_NOT_VERIFIED', 'Подтвердите email, чтобы изменять доски, где вы не владелец');
+  }
+}
+
 /** Доступ к доске: участник или владелец; иначе 404 (не раскрываем существование). */
 export async function boardAccess(userId: string, boardId: string): Promise<Access> {
   const [row] = await db
-    .select({ boardId: boards.id, title: boards.title, role: boardMembers.role })
+    .select({
+      boardId: boards.id,
+      title: boards.title,
+      role: boardMembers.role,
+      emailVerifiedAt: users.emailVerifiedAt,
+    })
     .from(boards)
     .innerJoin(boardMembers, and(eq(boardMembers.boardId, boards.id), eq(boardMembers.userId, userId)))
+    .innerJoin(users, eq(users.id, userId))
     .where(eq(boards.id, boardId));
   if (!row) {
     throw new HttpError(404, 'BOARD_NOT_FOUND', 'Доска не найдена или нет доступа');
   }
-  return { boardId: row.boardId, title: row.title, role: normalizeRole(row.role) };
+  return {
+    boardId: row.boardId,
+    title: row.title,
+    role: normalizeRole(row.role),
+    verified: row.emailVerifiedAt !== null,
+  };
 }
 
 /** Доступ через колонку (для карточек и колонок по их id). */
@@ -161,6 +187,13 @@ const listBoards: RequestHandler<{ id: string }> = async (req, res) => {
 
 const createBoard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
+  const [account] = await db
+    .select({ emailVerifiedAt: users.emailVerifiedAt })
+    .from(users)
+    .where(eq(users.id, userId));
+  if (!account?.emailVerifiedAt) {
+    throw new HttpError(403, 'EMAIL_NOT_VERIFIED', 'Подтвердите email, чтобы создавать доски');
+  }
   const { title } = createBoardSchema.parse(req.body);
   const defaultColumns = ['To Do', 'In Progress', 'Done'];
   const board = await db.transaction(async (tx) => {
@@ -187,7 +220,7 @@ const getBoard: RequestHandler<{ id: string }> = async (req, res) => {
 const renameBoard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
   const access = await boardAccess(userId, req.params.id);
-  requirePermission(access.role, 'renameBoard');
+  requireAction(access, 'renameBoard');
   const { title } = renameBoardSchema.parse(req.body);
   await db.update(boards).set({ title }).where(eq(boards.id, access.boardId));
   res.json(await snapshot(access.boardId, access.role));
@@ -196,7 +229,7 @@ const renameBoard: RequestHandler<{ id: string }> = async (req, res) => {
 const deleteBoard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
   const access = await boardAccess(userId, req.params.id);
-  requirePermission(access.role, 'deleteBoard');
+  requireAction(access, 'deleteBoard');
   await db.delete(boards).where(eq(boards.id, access.boardId));
   res.json({ ok: true });
 };
@@ -218,7 +251,7 @@ const listMembers: RequestHandler<{ id: string }> = async (req, res) => {
 const updateMember: RequestHandler<{ id: string; userId: string }> = async (req, res) => {
   const actorId = await requireUserId(req);
   const access = await boardAccess(actorId, req.params.id);
-  requirePermission(access.role, 'manageMembers');
+  requireAction(access, 'manageMembers');
   const { role } = updateMemberSchema.parse(req.body);
   const targetId = req.params.userId;
 
@@ -251,7 +284,7 @@ const updateMember: RequestHandler<{ id: string; userId: string }> = async (req,
 const removeMember: RequestHandler<{ id: string; userId: string }> = async (req, res) => {
   const actorId = await requireUserId(req);
   const access = await boardAccess(actorId, req.params.id);
-  requirePermission(access.role, 'manageMembers');
+  requireAction(access, 'manageMembers');
   const targetId = req.params.userId;
 
   const [target] = await db

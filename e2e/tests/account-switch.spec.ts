@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { registerAndVerify, uniqueEmail } from './helpers';
 
 /**
  * Смена аккаунта в одном окне без перезагрузки.
@@ -8,17 +9,8 @@ import { test, expect, type Page } from '@playwright/test';
  * уже с новой cookie.
  */
 
-let counter = 0;
-const uniqueEmail = (tag: string) => `e2e-${tag}-${Date.now()}-${counter++}@test.dev`;
-
 async function register(page: Page, email: string, name: string): Promise<void> {
-  await page.goto('/register');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Имя').fill(name);
-  await page.getByLabel('Пароль (минимум 8 символов)').fill('password123');
-  await page.getByLabel('Повторите пароль').fill('password123');
-  await page.getByRole('button', { name: 'Создать аккаунт' }).click();
-  await expect(page).toHaveURL(/\/boards$/);
+  await registerAndVerify(page, email, name);
 }
 
 test('после смены аккаунта права применяются без перезагрузки', async ({ browser, page }) => {

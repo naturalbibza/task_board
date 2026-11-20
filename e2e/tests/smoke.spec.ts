@@ -1,22 +1,14 @@
 import { test, expect, type Page } from '@playwright/test';
+import { registerAndVerify, uniqueEmail } from './helpers';
 
 /**
  * Дымовые сценарии v2 (фаза 11): защищают поведение при редизайне.
  * Запуск: поднять `pnpm dev`, затем `pnpm e2e`.
  */
 
-let counter = 0;
-const uniqueEmail = () => `e2e-${Date.now()}-${counter++}@test.dev`;
-
 async function register(page: Page): Promise<string> {
-  const email = uniqueEmail();
-  await page.goto('/register');
-  await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Имя').fill('E2E Тестер');
-  await page.getByLabel('Пароль (минимум 8 символов)').fill('password123');
-  await page.getByLabel('Повторите пароль').fill('password123');
-  await page.getByRole('button', { name: 'Создать аккаунт' }).click();
-  await expect(page).toHaveURL(/\/boards$/);
+  const email = uniqueEmail('smoke');
+  await registerAndVerify(page, email);
   return email;
 }
 

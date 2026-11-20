@@ -11,9 +11,11 @@ import {
 import * as boardsApi from '../api/boards';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -47,6 +49,7 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
   const [members, setMembers] = useState<MemberDto[]>(props.members);
   const [invites, setInvites] = useState<InviteDto[] | null>(null);
   const [inviteRole, setInviteRole] = useState<AssignableRole>('EDITOR');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -107,9 +110,12 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
   const createInvite = async () => {
     setBusy(true);
     try {
-      const res = await boardsApi.createInvite(props.boardId, inviteRole);
+      const email = inviteEmail.trim();
+      const res = await boardsApi.createInvite(props.boardId, inviteRole, email || undefined);
       setInvites((prev) => [...(prev ?? []), res.invite]);
+      setInviteEmail('');
       setError(null);
+      toast.success(email ? `Приглашение отправлено на ${email}` : 'Ссылка создана');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -279,9 +285,18 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
                       ))}
                     </SelectContent>
                   </Select>
+                  <Input
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="Email (необязательно)"
+                    aria-label="Email для приглашения"
+                    type="email"
+                    className="h-8 w-full sm:w-52"
+                    maxLength={254}
+                  />
                   <Button size="sm" variant="outline" onClick={() => void createInvite()} disabled={busy}>
                     <Plus className="size-4" />
-                    Создать ссылку
+                    {inviteEmail.trim() ? 'Пригласить по email' : 'Создать ссылку'}
                   </Button>
                 </div>
               )}
@@ -311,6 +326,11 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
                           <Badge variant="outline" className="shrink-0 font-normal">
                             {BOARD_ROLE_LABELS[invite.role]}
                           </Badge>
+                          {invite.email && (
+                            <Badge variant="secondary" className="max-w-44 shrink-0 truncate font-normal">
+                              {invite.email}
+                            </Badge>
+                          )}
                           <span
                             className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
                             title={linkOf(invite.token)}

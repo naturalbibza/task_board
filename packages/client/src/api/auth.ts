@@ -18,3 +18,13 @@ export function logout(): Promise<{ ok: boolean }> {
 export function me(): Promise<AuthResponse> {
   return api<AuthResponse>('/auth/me');
 }
+
+// --- Подтверждение email (v2, фаза 14) ---
+
+export function verifyEmail(token: string): Promise<{ ok: boolean }> {
+  return api<{ ok: boolean }>('/auth/verify-email', { method: 'POST', body: JSON.stringify({ token }) });
+}
+
+export function resendVerification(): Promise<{ ok: boolean; alreadyVerified?: boolean }> {
+  return api<{ ok: boolean; alreadyVerified?: boolean }>('/auth/resend-verification', { method: 'POST' });
+}

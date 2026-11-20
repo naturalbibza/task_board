@@ -22,7 +22,7 @@ import {
 import type { Socket } from 'socket.io';
 import { db } from '../db';
 import { boardMembers, boards, cards, columns as columnsTable, users } from '../db/schema';
-import { boardAccess, snapshot, cardAccess, cardDto, columnAccess, columnDto, normalizeRole, requirePermission } from '../http/boards';
+import { boardAccess, snapshot, cardAccess, cardDto, columnAccess, columnDto, normalizeRole, requireAction } from '../http/boards';
 import { COOKIE_NAME, verifySessionToken } from '../http/session';
 import { HttpError } from '../http/errors';
 import { moveCard, moveColumn, nextCardPosition, nextColumnPosition } from '../services/positions';
@@ -188,7 +188,7 @@ export function registerSocketHandlers(io: Io): void {
         }
         const { boardId, title } = parsed.data;
         const access = await boardAccess(data.userId, boardId);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         await enqueueBoard(boardId, async () => {
           const position = await nextColumnPosition(boardId);
           const [column] = await db.insert(columnsTable).values({ boardId, title, position }).returning();
@@ -208,7 +208,7 @@ export function registerSocketHandlers(io: Io): void {
         }
         const { id, title } = parsed.data;
         const access = await columnAccess(data.userId, id);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         await enqueueBoard(access.boardId, async () => {
           const [column] = await db
             .update(columnsTable)
@@ -231,7 +231,7 @@ export function registerSocketHandlers(io: Io): void {
         }
         const { id } = parsed.data;
         const access = await columnAccess(data.userId, id);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         const columnId = access.columnId;
         await enqueueBoard(access.boardId, async () => {
           await db.delete(columnsTable).where(eq(columnsTable.id, columnId));
@@ -251,7 +251,7 @@ export function registerSocketHandlers(io: Io): void {
         }
         const { columnId, title, description } = parsed.data;
         const access = await columnAccess(data.userId, columnId);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         await enqueueBoard(access.boardId, async () => {
           const position = await nextCardPosition(columnId);
           const [card] = await db
@@ -274,7 +274,7 @@ export function registerSocketHandlers(io: Io): void {
         }
         const { id, title, description } = parsed.data;
         const access = await cardAccess(data.userId, id);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         await enqueueBoard(access.boardId, async () => {
           const [card] = await db
             .update(cards)
@@ -300,7 +300,7 @@ export function registerSocketHandlers(io: Io): void {
         }
         const { id } = parsed.data;
         const access = await cardAccess(data.userId, id);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         await enqueueBoard(access.boardId, async () => {
           await db.delete(cards).where(eq(cards.id, id));
           io.to(roomOf(access.boardId)).emit('card:deleted', { cardId: id, columnId: access.columnId });
@@ -319,7 +319,7 @@ export function registerSocketHandlers(io: Io): void {
       const { id, toColumnId, beforeId, afterId } = parsed.data;
       try {
         const access = await cardAccess(data.userId, id);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         const [col] = await db
           .select({ boardId: columnsTable.boardId })
           .from(columnsTable)
@@ -347,7 +347,7 @@ export function registerSocketHandlers(io: Io): void {
       const { id, beforeId, afterId } = parsed.data;
       try {
         const access = await columnAccess(data.userId, id);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         const [col] = await db
           .select({ boardId: columnsTable.boardId })
           .from(columnsTable)
@@ -374,7 +374,7 @@ export function registerSocketHandlers(io: Io): void {
         }
         const { boardId, title } = parsed.data;
         const access = await boardAccess(data.userId, boardId);
-        requirePermission(access.role, 'renameBoard');
+        requireAction(access, 'renameBoard');
         await enqueueBoard(boardId, async () => {
           await db.update(boards).set({ title }).where(eq(boards.id, boardId));
           io.to(roomOf(boardId)).emit('board:updated', { boardId, title });
@@ -393,7 +393,7 @@ export function registerSocketHandlers(io: Io): void {
       const { cardId } = parsed.data;
       try {
         const access = await cardAccess(data.userId, cardId);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         editingCards.add(cardId);
         setEditing(io, access.boardId, cardId, data.userId);
       } catch (e) {
@@ -410,7 +410,7 @@ export function registerSocketHandlers(io: Io): void {
       const { cardId } = parsed.data;
       try {
         const access = await cardAccess(data.userId, cardId);
-        requirePermission(access.role, 'editContent');
+        requireAction(access, 'editContent');
         editingCards.delete(cardId);
         setEditing(io, access.boardId, cardId, null);
       } catch (e) {
