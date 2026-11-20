@@ -50,13 +50,14 @@ class SmtpMailer implements Mailer {
   }
 
   async send(message: MailMessage): Promise<void> {
-    await this.transporter.sendMail({
+    const info = await this.transporter.sendMail({
       from: env.MAIL_FROM_NAME ? `"${env.MAIL_FROM_NAME}" <${env.MAIL_FROM}>` : env.MAIL_FROM,
       to: message.to,
       subject: message.subject,
       text: message.text,
       html: message.html,
     });
+    console.log(`[mail] отправлено: ${message.to} (${info.messageId})`);
   }
 }
 

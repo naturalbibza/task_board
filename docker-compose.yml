@@ -10,6 +10,15 @@ services:
       # Заполняются после привязки домена (до тех пор куки без флага Secure)
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       ORIGIN: ${ORIGIN:-}
+      # Почта (v2): без MAIL_MODE=smtp письма пишутся в .localmail контейнера
+      MAIL_MODE: ${MAIL_MODE:-console}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_SECURE: ${SMTP_SECURE:-1}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Task Board}
     depends_on:
       db:
         condition: service_healthy
