@@ -1,10 +1,12 @@
 ﻿import { Router } from 'express';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import type { RequestHandler } from 'express';
 import {
   can,
   createBoardSchema,
+  favoriteBoardSchema,
   renameBoardSchema,
+  SYSTEM_BOARD_TEMPLATES,
   updateMemberSchema,
   type BoardAction,
   type BoardDto,
@@ -13,16 +15,24 @@ import {
   type CardDto,
   type ColumnDto,
   type MemberDto,
+  type TemplateColumn,
 } from '@task-board/shared';
 import { db } from '../db';
-import { boardMembers, boards, cards, columns, invites, users } from '../db/schema';
+import { boardMembers, boards, boardTemplates, cards, columns, invites, users } from '../db/schema';
 import { HttpError } from './errors';
 import { requireUserId } from './session';
 import { emitToBoard } from '../ws/emit';
 
 export const boardsRouter = Router();
 
-type Access = { boardId: string; title: string; role: BoardRole; verified: boolean };
+type Access = {
+  boardId: string;
+  title: string;
+  role: BoardRole;
+  verified: boolean;
+  archived: boolean;
+  favorite: boolean;
+};
 type DbRole = typeof boardMembers.$inferSelect['role'];
 
 /** В БД enum хранит legacy-значение MEMBER (v1) — наружу отдаём только 4 роли (v2). */
@@ -43,6 +53,10 @@ export function requirePermission(role: BoardRole, action: BoardAction): void {
  */
 export function requireAction(access: Access, action: BoardAction): void {
   requirePermission(access.role, action);
+  // Архивная доска — только просмотр; владелец может удалить или восстановить её
+  if (access.archived && action !== 'deleteBoard' && action !== 'archiveBoard') {
+    throw new HttpError(403, 'BOARD_ARCHIVED', 'Доска в архиве — доступен только просмотр');
+  }
   if (access.verified) return;
   if (action === 'invite' || action === 'manageMembers') {
     throw new HttpError(403, 'EMAIL_NOT_VERIFIED', 'Подтвердите email, чтобы управлять участниками доски');
@@ -59,6 +73,8 @@ export async function boardAccess(userId: string, boardId: string): Promise<Acce
       boardId: boards.id,
       title: boards.title,
       role: boardMembers.role,
+      favorite: boardMembers.favorite,
+      archivedAt: boards.archivedAt,
       emailVerifiedAt: users.emailVerifiedAt,
     })
     .from(boards)
@@ -73,6 +89,8 @@ export async function boardAccess(userId: string, boardId: string): Promise<Acce
     title: row.title,
     role: normalizeRole(row.role),
     verified: row.emailVerifiedAt !== null,
+    archived: row.archivedAt !== null,
+    favorite: row.favorite,
   };
 }
 
@@ -97,8 +115,9 @@ export async function cardAccess(userId: string, cardId: string): Promise<Access
 }
 
 export function boardDto(
-  board: { id: string; title: string; createdAt: Date; updatedAt: Date },
+  board: { id: string; title: string; createdAt: Date; updatedAt: Date; archivedAt: Date | null },
   role: BoardRole,
+  favorite = false,
 ): BoardDto {
   return {
     id: board.id,
@@ -106,6 +125,8 @@ export function boardDto(
     createdAt: board.createdAt.toISOString(),
     updatedAt: board.updatedAt.toISOString(),
     role,
+    archivedAt: board.archivedAt ? board.archivedAt.toISOString() : null,
+    favorite,
   };
 }
 
@@ -139,7 +160,7 @@ function memberDto(user: typeof users.$inferSelect, role: DbRole): MemberDto {
 }
 
 /** Полный снапшот доски (FR-9: тот же формат у WS board:state). */
-export async function snapshot(boardId: string, role: BoardRole): Promise<BoardSnapshot> {
+export async function snapshot(boardId: string, role: BoardRole, favorite = false): Promise<BoardSnapshot> {
   const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
   if (!board) {
     throw new HttpError(404, 'BOARD_NOT_FOUND', 'Доска не найдена');
@@ -165,7 +186,7 @@ export async function snapshot(boardId: string, role: BoardRole): Promise<BoardS
     .orderBy(asc(boardMembers.joinedAt));
 
   return {
-    board: boardDto(board, role),
+    board: boardDto(board, role, favorite),
     columns: columnRows.map(columnDto),
     cards: cardRows.map(cardDto),
     members: memberRows.map((m) => memberDto(m.user, m.role)),
@@ -176,13 +197,14 @@ export async function snapshot(boardId: string, role: BoardRole): Promise<BoardS
 
 const listBoards: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
+  const archived = req.query.archived === '1';
   const rows = await db
-    .select({ board: boards, role: boardMembers.role })
+    .select({ board: boards, role: boardMembers.role, favorite: boardMembers.favorite })
     .from(boardMembers)
     .innerJoin(boards, eq(boards.id, boardMembers.boardId))
-    .where(eq(boardMembers.userId, userId))
-    .orderBy(asc(boards.createdAt));
-  res.json({ boards: rows.map((r) => boardDto(r.board, normalizeRole(r.role))) });
+    .where(and(eq(boardMembers.userId, userId), archived ? isNotNull(boards.archivedAt) : isNull(boards.archivedAt)))
+    .orderBy(desc(boards.updatedAt));
+  res.json({ boards: rows.map((r) => boardDto(r.board, normalizeRole(r.role), r.favorite)) });
 };
 
 const createBoard: RequestHandler<{ id: string }> = async (req, res) => {
@@ -194,27 +216,57 @@ const createBoard: RequestHandler<{ id: string }> = async (req, res) => {
   if (!account?.emailVerifiedAt) {
     throw new HttpError(403, 'EMAIL_NOT_VERIFIED', 'Подтвердите email, чтобы создавать доски');
   }
-  const { title } = createBoardSchema.parse(req.body);
-  const defaultColumns = ['To Do', 'In Progress', 'Done'];
+  const { title, templateId } = createBoardSchema.parse(req.body);
+
+  // Шаблон доски (FR-51): системный или собственный; колонки/карточки копируются.
+  let templateColumns: TemplateColumn[];
+  if (templateId) {
+    const system = SYSTEM_BOARD_TEMPLATES.find((t) => t.id === templateId);
+    if (system) {
+      templateColumns = system.columns;
+    } else {
+      const [row] = await db
+        .select()
+        .from(boardTemplates)
+        .where(and(eq(boardTemplates.id, templateId), eq(boardTemplates.userId, userId)));
+      if (!row) {
+        throw new HttpError(404, 'TEMPLATE_NOT_FOUND', 'Шаблон не найден');
+      }
+      templateColumns = row.columns ?? [];
+    }
+  } else {
+    templateColumns = ['To Do', 'In Progress', 'Done'].map((columnTitle) => ({ title: columnTitle, cards: [] }));
+  }
+
   const board = await db.transaction(async (tx) => {
     const [created] = await tx.insert(boards).values({ title }).returning();
     await tx.insert(boardMembers).values({ boardId: created.id, userId, role: 'OWNER' });
-    await tx.insert(columns).values(
-      defaultColumns.map((columnTitle, i) => ({
-        boardId: created.id,
-        title: columnTitle,
-        position: (i + 1) * 1024,
-      })),
-    );
+    for (const [i, templateColumn] of templateColumns.entries()) {
+      const [column] = await tx
+        .insert(columns)
+        .values({ boardId: created.id, title: templateColumn.title, position: (i + 1) * 1024 })
+        .returning();
+      if (templateColumn.cards.length > 0) {
+        await tx.insert(cards).values(
+          templateColumn.cards.map((card, j) => ({
+            columnId: column.id,
+            title: card.title,
+            description: card.description,
+            position: (j + 1) * 1024,
+            authorId: userId,
+          })),
+        );
+      }
+    }
     return created;
   });
-  res.status(201).json({ board: boardDto(board, 'OWNER') });
+  res.status(201).json({ board: boardDto(board, 'OWNER', false) });
 };
 
 const getBoard: RequestHandler<{ id: string }> = async (req, res) => {
   const userId = await requireUserId(req);
   const access = await boardAccess(userId, req.params.id);
-  res.json(await snapshot(access.boardId, access.role));
+  res.json(await snapshot(access.boardId, access.role, access.favorite));
 };
 
 const renameBoard: RequestHandler<{ id: string }> = async (req, res) => {
@@ -223,7 +275,7 @@ const renameBoard: RequestHandler<{ id: string }> = async (req, res) => {
   requireAction(access, 'renameBoard');
   const { title } = renameBoardSchema.parse(req.body);
   await db.update(boards).set({ title }).where(eq(boards.id, access.boardId));
-  res.json(await snapshot(access.boardId, access.role));
+  res.json(await snapshot(access.boardId, access.role, access.favorite));
 };
 
 const deleteBoard: RequestHandler<{ id: string }> = async (req, res) => {
@@ -232,6 +284,46 @@ const deleteBoard: RequestHandler<{ id: string }> = async (req, res) => {
   requireAction(access, 'deleteBoard');
   await db.delete(boards).where(eq(boards.id, access.boardId));
   res.json({ ok: true });
+};
+
+// --- Архив и избранное (v2, фаза 15) ---
+
+const archiveBoard: RequestHandler<{ id: string }> = async (req, res) => {
+  const userId = await requireUserId(req);
+  const access = await boardAccess(userId, req.params.id);
+  requireAction(access, 'archiveBoard');
+  if (access.archived) {
+    throw new HttpError(400, 'BOARD_ALREADY_ARCHIVED', 'Доска уже в архиве');
+  }
+  const archivedAt = new Date();
+  await db.update(boards).set({ archivedAt }).where(eq(boards.id, access.boardId));
+  emitToBoard(access.boardId, 'board:archived', {
+    boardId: access.boardId,
+    archivedAt: archivedAt.toISOString(),
+  });
+  res.json(await snapshot(access.boardId, access.role, access.favorite));
+};
+
+const restoreBoard: RequestHandler<{ id: string }> = async (req, res) => {
+  const userId = await requireUserId(req);
+  const access = await boardAccess(userId, req.params.id);
+  requireAction(access, 'archiveBoard');
+  await db.update(boards).set({ archivedAt: null }).where(eq(boards.id, access.boardId));
+  emitToBoard(access.boardId, 'board:restored', { boardId: access.boardId, archivedAt: null });
+  res.json(await snapshot(access.boardId, access.role, access.favorite));
+};
+
+const setFavorite: RequestHandler<{ id: string }> = async (req, res) => {
+  const userId = await requireUserId(req);
+  const access = await boardAccess(userId, req.params.id);
+  requireAction(access, 'view');
+  const { favorite } = favoriteBoardSchema.parse(req.body);
+  await db
+    .update(boardMembers)
+    .set({ favorite })
+    .where(and(eq(boardMembers.boardId, access.boardId), eq(boardMembers.userId, userId)));
+  // Избранное персонально — никому больше не транслируем; клиент обновляет локально.
+  res.json({ boardId: access.boardId, favorite });
 };
 
 // --- Участники и роли (v2, FR-23–24) ---
@@ -335,6 +427,9 @@ boardsRouter.post('/', createBoard);
 boardsRouter.get('/:id/members', listMembers);
 boardsRouter.patch('/:id/members/:userId', updateMember);
 boardsRouter.delete('/:id/members/:userId', removeMember);
+boardsRouter.post('/:id/archive', archiveBoard);
+boardsRouter.post('/:id/restore', restoreBoard);
+boardsRouter.patch('/:id/favorite', setFavorite);
 boardsRouter.get('/:id', getBoard);
 boardsRouter.patch('/:id', renameBoard);
 boardsRouter.delete('/:id', deleteBoard);

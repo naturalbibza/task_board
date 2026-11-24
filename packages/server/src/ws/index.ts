@@ -15,13 +15,16 @@ import {
   columnDeleteSchema,
   columnMoveSchema,
   columnRenameSchema,
+  createColumnFromTemplateSchema,
+  SYSTEM_COLUMN_TEMPLATES,
+  type ColumnTemplateDto,
   type ClientToServerEvents,
   type ServerToClientEvents,
   type SocketData,
 } from '@task-board/shared';
 import type { Socket } from 'socket.io';
 import { db } from '../db';
-import { boardMembers, boards, cards, columns as columnsTable, users } from '../db/schema';
+import { boardMembers, boards, cards, columnTemplates, columns as columnsTable, users } from '../db/schema';
 import { boardAccess, snapshot, cardAccess, cardDto, columnAccess, columnDto, normalizeRole, requireAction } from '../http/boards';
 import { COOKIE_NAME, verifySessionToken } from '../http/session';
 import { HttpError } from '../http/errors';
@@ -145,7 +148,7 @@ export function registerSocketHandlers(io: Io): void {
         await socket.join(roomOf(boardId));
         data.rooms.add(boardId);
         // Полный снапшот только этому сокету (FR-13)
-        socket.emit('board:state', await snapshot(boardId, normalizeRole(membership.role)));
+        socket.emit('board:state', await snapshot(boardId, normalizeRole(membership.role), membership.favorite));
         // Текущее состояние редактирования (фаза 8)
         const editing = editingByBoard.get(boardId);
         if (editing) {
@@ -193,6 +196,66 @@ export function registerSocketHandlers(io: Io): void {
           const position = await nextColumnPosition(boardId);
           const [column] = await db.insert(columnsTable).values({ boardId, title, position }).returning();
           io.to(roomOf(boardId)).emit('column:created', { column: columnDto(column) });
+        });
+      } catch (e) {
+        wsErrorFrom(socket, e);
+      }
+    });
+
+    socket.on('column:create-from-template', async (raw) => {
+      try {
+        const parsed = createColumnFromTemplateSchema.safeParse(raw);
+        if (!parsed.success) {
+          wsError(socket, 'VALIDATION', 'Некорректный column:create-from-template');
+          return;
+        }
+        const { boardId, templateId, title } = parsed.data;
+        const access = await boardAccess(data.userId, boardId);
+        requireAction(access, 'editContent');
+
+        // Системные шаблоны — из shared, пользовательские — только свои (FR-43)
+        let template: ColumnTemplateDto | undefined = SYSTEM_COLUMN_TEMPLATES.find((t) => t.id === templateId);
+        if (!template) {
+          const [row] = await db
+            .select()
+            .from(columnTemplates)
+            .where(and(eq(columnTemplates.id, templateId), eq(columnTemplates.userId, data.userId)));
+          if (!row) {
+            wsError(socket, 'TEMPLATE_NOT_FOUND', 'Шаблон не найден');
+            return;
+          }
+          template = { id: row.id, title: row.title, cards: row.cards ?? [], system: false };
+        }
+
+        const columnTitle = title?.trim() || template.title;
+        await enqueueBoard(boardId, async () => {
+          // Колонка и её карточки создаются одной транзакцией (FR-44)
+          const position = await nextColumnPosition(boardId);
+          const { column, inserted } = await db.transaction(async (tx) => {
+            const [created] = await tx
+              .insert(columnsTable)
+              .values({ boardId, title: columnTitle, position })
+              .returning();
+            const cardRows = template.cards.length
+              ? await tx
+                  .insert(cards)
+                  .values(
+                    template.cards.map((card, i) => ({
+                      columnId: created.id,
+                      title: card.title,
+                      description: card.description,
+                      position: (i + 1) * 1024,
+                      authorId: data.userId,
+                    })),
+                  )
+                  .returning()
+              : [];
+            return { column: created, inserted: cardRows };
+          });
+          io.to(roomOf(boardId)).emit('column:created', { column: columnDto(column) });
+          if (inserted.length > 0) {
+            io.to(roomOf(boardId)).emit('cards:created', { cards: inserted.map(cardDto) });
+          }
         });
       } catch (e) {
         wsErrorFrom(socket, e);

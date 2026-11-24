@@ -64,6 +64,10 @@ export interface ServerToClientEvents {
   'card:updated': (payload: { card: CardDto }) => void;
   'card:moved': (payload: { cards: CardDto[] }) => void;
   'card:deleted': (payload: { cardId: string; columnId: string }) => void;
+  /** Батч карточек (создание колонки из шаблона) */
+  'cards:created': (payload: { cards: CardDto[] }) => void;
+  'board:archived': (payload: { boardId: string; archivedAt: string }) => void;
+  'board:restored': (payload: { boardId: string; archivedAt: null }) => void;
   'member:updated': (payload: { boardId: string; member: MemberDto }) => void;
   'member:removed': (payload: { boardId: string; userId: string }) => void;
   'presence:update': (payload: { boardId: string; users: PresenceUser[] }) => void;
@@ -79,6 +83,7 @@ export interface ClientToServerEvents {
   'column:rename': (payload: { id: string; title: string }) => void;
   'column:move': (payload: { id: string; beforeId?: string | null; afterId?: string | null }) => void;
   'column:delete': (payload: { id: string }) => void;
+  'column:create-from-template': (payload: { boardId: string; templateId: string; title?: string }) => void;
   'card:create': (payload: { columnId: string; title: string; description?: string }) => void;
   'card:update': (payload: { id: string; title?: string; description?: string | null }) => void;
   'card:move': (payload: { id: string; toColumnId: string; beforeId?: string | null; afterId?: string | null }) => void;

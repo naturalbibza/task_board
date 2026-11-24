@@ -1,4 +1,5 @@
 import {
+  boolean,
   doublePrecision,
   index,
   integer,
@@ -11,7 +12,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { randomUUID } from 'node:crypto';
-import type { MessengerContact } from '@task-board/shared';
+import type { MessengerContact, TemplateCard, TemplateColumn } from '@task-board/shared';
 
 const id = () =>
   text()
@@ -58,6 +59,8 @@ export const emailVerifications = pgTable(
 export const boards = pgTable('boards', {
   id: id(),
   title: text().notNull(),
+  // Архив (v2, фаза 15): null — доска активна, иначе только просмотр
+  archivedAt: ts(),
   createdAt: ts().notNull().defaultNow(),
   updatedAt: ts()
     .notNull()
@@ -75,6 +78,8 @@ export const boardMembers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     role: roleEnum().notNull(),
+    // Избранное — персонально для участника (v2, фаза 15)
+    favorite: boolean().notNull().default(false),
     // Ссылка, по которой участник вступил (v2): при удалении её отзываем,
     // чтобы он не вернулся по той же ссылке.
     inviteId: text().references(() => invites.id, { onDelete: 'set null' }),
@@ -138,6 +143,44 @@ export const invites = pgTable(
     createdAt: ts().notNull().defaultNow(),
   },
   (t) => [uniqueIndex('invites_board_token_idx').on(t.boardId, t.token)],
+);
+
+/** Пользовательские шаблоны колонок (v2, фаза 15): название + карточки. */
+export const columnTemplates = pgTable(
+  'column_templates',
+  {
+    id: id(),
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    cards: jsonb().$type<TemplateCard[]>().notNull(),
+    createdAt: ts().notNull().defaultNow(),
+    updatedAt: ts()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index('column_templates_user_idx').on(t.userId)],
+);
+
+/** Пользовательские шаблоны досок (FR-51): колонки и карточки в jsonb. */
+export const boardTemplates = pgTable(
+  'board_templates',
+  {
+    id: id(),
+    userId: text()
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    columns: jsonb().$type<TemplateColumn[]>().notNull(),
+    createdAt: ts().notNull().defaultNow(),
+    updatedAt: ts()
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [index('board_templates_user_idx').on(t.userId)],
 );
 
 export type User = typeof users.$inferSelect;

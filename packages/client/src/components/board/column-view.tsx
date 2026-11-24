@@ -1,5 +1,5 @@
 import { useCallback, useState, type FormEvent } from 'react';
-import { GripVertical, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { GripVertical, MoreHorizontal, Plus, Save, Trash2 } from 'lucide-react';
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import type { CardDto, ColumnDto, MemberDto } from '@task-board/shared';
 import { cn } from '@/lib/utils';
@@ -24,6 +24,7 @@ interface ColumnViewProps {
   editingByCard: Record<string, string>;
   members: MemberDto[];
   readOnly?: boolean;
+  onSaveAsTemplate?: (column: ColumnDto) => void;
 }
 
 /** Колонка: перетаскивание за ручку, переименование, удаление, карточки. */
@@ -137,6 +138,10 @@ export function ColumnView(props: ColumnViewProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => props.onSaveAsTemplate?.(props.column)}>
+                <Save className="size-4" />
+                Сохранить как шаблон
+              </DropdownMenuItem>
               <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDeleteColumn}>
                 <Trash2 className="size-4" />
                 Удалить колонку

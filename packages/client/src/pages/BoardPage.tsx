@@ -15,11 +15,30 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
-import type { BoardSnapshot, CardDto, ColumnDto, MemberDto, PresenceUser } from '@task-board/shared';
+import type {
+  BoardSnapshot,
+  CardDto,
+  ColumnDto,
+  ColumnTemplateDto,
+  MemberDto,
+  PresenceUser,
+} from '@task-board/shared';
 import { BOARD_ROLE_LABELS, can } from '@task-board/shared';
-import { ArrowLeft, GripVertical, LayoutGrid, Users } from 'lucide-react';
+import {
+  Archive,
+  ArchiveRestore,
+  ArrowLeft,
+  GripVertical,
+  LayoutGrid,
+  MoreHorizontal,
+  Save,
+  Star,
+  Trash2,
+  Users,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import * as boardsApi from '../api/boards';
+import * as templatesApi from '../api/templates';
 import { getSocket } from '../api/socket';
 import { errorText, useAuth } from '../state/auth-context';
 import { cn } from '@/lib/utils';
@@ -34,6 +53,13 @@ import type { WsApi } from '@/components/board/types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 const STEP = 1024;
@@ -137,6 +163,7 @@ export function BoardPage() {
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState(() => getSocket().connected);
   const [shareOpen, setShareOpen] = useState(false);
+  const [templates, setTemplates] = useState<ColumnTemplateDto[]>([]);
 
   // Перетаскивание: DragOverlay следует за курсором, а «тень»-заглушка живёт
   // в разметке на том месте, куда карточка/колонка встанет после дропа.
@@ -164,8 +191,10 @@ export function BoardPage() {
     [snapshot],
   );
 
-  // Права текущего пользователя на доске (FR-23)
-  const canEdit = snapshot ? can(snapshot.board.role, 'editContent') : false;
+  // Права текущего пользователя на доске (FR-23). В архиве — только просмотр (FR-39).
+  const archived = snapshot ? snapshot.board.archivedAt !== null : false;
+  const canEdit = snapshot ? can(snapshot.board.role, 'editContent') && !archived : false;
+  const isOwner = snapshot ? can(snapshot.board.role, 'archiveBoard') : false;
 
   // Базовый порядок карточек по колонкам (без превью) — источник правды для дропа.
   const cardsByColumnBase = useMemo(() => {
@@ -319,6 +348,13 @@ export function BoardPage() {
     });
   };
 
+  useEffect(() => {
+    templatesApi
+      .listTemplates()
+      .then((res) => setTemplates(res.templates))
+      .catch(() => undefined);
+  }, []);
+
   // WS: снапшот, presence и события мутаций (FR-9, FR-13, FR-14, фаза 8)
   useEffect(() => {
     if (!id) return;
@@ -363,6 +399,20 @@ export function BoardPage() {
       setSnapshot((prev) => prev && { ...prev, cards: mergeById(prev.cards, [payload.card]) });
     const onCardDeleted = (payload: { cardId: string; columnId: string }) =>
       setSnapshot((prev) => prev && { ...prev, cards: prev.cards.filter((c) => c.id !== payload.cardId) });
+    const onCardsCreated = (payload: { cards: CardDto[] }) =>
+      setSnapshot((prev) => prev && { ...prev, cards: [...prev.cards, ...payload.cards] });
+    const onBoardArchived = (payload: { boardId: string; archivedAt: string }) =>
+      setSnapshot((prev) =>
+        prev && prev.board.id === payload.boardId
+          ? { ...prev, board: { ...prev.board, archivedAt: payload.archivedAt } }
+          : prev,
+      );
+    const onBoardRestored = (payload: { boardId: string; archivedAt: null }) =>
+      setSnapshot((prev) =>
+        prev && prev.board.id === payload.boardId
+          ? { ...prev, board: { ...prev.board, archivedAt: payload.archivedAt } }
+          : prev,
+      );
     const onBoardUpdated = (payload: { boardId: string; title: string }) =>
       setSnapshot((prev) =>
         prev && prev.board.id === payload.boardId ? { ...prev, board: { ...prev.board, title: payload.title } } : prev,
@@ -407,6 +457,9 @@ export function BoardPage() {
     socket.on('card:created', onCardCreated);
     socket.on('card:updated', onCardUpdated);
     socket.on('card:deleted', onCardDeleted);
+    socket.on('cards:created', onCardsCreated);
+    socket.on('board:archived', onBoardArchived);
+    socket.on('board:restored', onBoardRestored);
     socket.on('board:updated', onBoardUpdated);
     socket.on('member:updated', onMemberUpdated);
     socket.on('member:removed', onMemberRemoved);
@@ -453,6 +506,9 @@ export function BoardPage() {
       socket.off('card:created', onCardCreated);
       socket.off('card:updated', onCardUpdated);
       socket.off('card:deleted', onCardDeleted);
+      socket.off('cards:created', onCardsCreated);
+      socket.off('board:archived', onBoardArchived);
+      socket.off('board:restored', onBoardRestored);
       socket.off('board:updated', onBoardUpdated);
       socket.off('member:updated', onMemberUpdated);
       socket.off('member:removed', onMemberRemoved);
@@ -476,6 +532,13 @@ export function BoardPage() {
       createColumn: (title: string) => {
         if (!boardId || !guard()) return;
         socket.emit('column:create', { boardId, title });
+      },
+      createColumnFromTemplate: (templateId: string, title?: string) => {
+        if (!boardId || !guard()) return;
+        socket.emit(
+          'column:create-from-template',
+          title?.trim() ? { boardId, templateId, title: title.trim() } : { boardId, templateId },
+        );
       },
       renameColumn: (columnId: string, title: string) => {
         if (!guard()) return;
@@ -522,6 +585,84 @@ export function BoardPage() {
       setSnapshot(null);
     }
   }, [id]);
+
+  // --- Архив, избранное, шаблоны (v2, фаза 15) ---
+
+  const onToggleFavorite = async () => {
+    if (!snapshot) return;
+    const favorite = !snapshot.board.favorite;
+    setSnapshot((prev) => prev && { ...prev, board: { ...prev.board, favorite } });
+    try {
+      await boardsApi.setBoardFavorite(snapshot.board.id, favorite);
+      toast.success(favorite ? 'Доска в избранном' : 'Убрано из избранного');
+    } catch (err) {
+      setSnapshot((prev) => prev && { ...prev, board: { ...prev.board, favorite: !favorite } });
+      toast.error(errorText(err));
+    }
+  };
+
+  const onArchive = async () => {
+    if (!snapshot) return;
+    if (
+      !window.confirm(
+        `Отправить доску «${snapshot.board.title}» в архив? Она станет доступна только для просмотра.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      setSnapshot(await boardsApi.archiveBoard(snapshot.board.id));
+      toast.success('Доска в архиве');
+    } catch (err) {
+      toast.error(errorText(err));
+    }
+  };
+
+  const onRestore = async () => {
+    if (!snapshot) return;
+    try {
+      setSnapshot(await boardsApi.restoreBoard(snapshot.board.id));
+      toast.success('Доска восстановлена');
+    } catch (err) {
+      toast.error(errorText(err));
+    }
+  };
+
+  const onDeleteBoard = async () => {
+    if (!snapshot) return;
+    if (!window.confirm(`Удалить доску «${snapshot.board.title}»? Это действие необратимо.`)) return;
+    try {
+      await boardsApi.deleteBoard(snapshot.board.id);
+      toast.success('Доска удалена');
+      navigate('/boards');
+    } catch (err) {
+      toast.error(errorText(err));
+    }
+  };
+
+  const onSaveBoardAsTemplate = async () => {
+    if (!snapshot) return;
+    const title = window.prompt('Название шаблона доски', snapshot.board.title);
+    if (title === null) return;
+    try {
+      const res = await templatesApi.saveBoardTemplate(snapshot.board.id, title.trim() || snapshot.board.title);
+      toast.success(`Шаблон доски «${res.template.title}» сохранён`);
+    } catch (err) {
+      toast.error(errorText(err));
+    }
+  };
+
+  const onSaveAsTemplate = async (column: ColumnDto) => {
+    const title = window.prompt('Название шаблона', column.title);
+    if (title === null) return;
+    try {
+      const res = await templatesApi.saveColumnTemplate(column.id, title.trim() || column.title);
+      setTemplates((prev) => [...prev, res.template]);
+      toast.success(`Шаблон «${res.template.title}» сохранён`);
+    } catch (err) {
+      toast.error(errorText(err));
+    }
+  };
 
   // Порядок колонок с учётом превью перетаскивания (без изменения данных до дропа).
   const displayColumns = useMemo(() => {
@@ -603,16 +744,55 @@ export function BoardPage() {
 
           <BoardTitle
             title={snapshot.board.title}
-            canRename={can(snapshot.board.role, 'renameBoard')}
+            canRename={can(snapshot.board.role, 'renameBoard') && !archived}
             onRename={async (title) => setSnapshot(await boardsApi.renameBoard(snapshot.board.id, title))}
             onError={setError}
           />
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 text-muted-foreground hover:text-amber-500"
+            aria-label={snapshot.board.favorite ? 'Убрать доску из избранного' : 'Добавить доску в избранное'}
+            aria-pressed={snapshot.board.favorite}
+            onClick={() => void onToggleFavorite()}
+          >
+            <Star className={snapshot.board.favorite ? 'size-4 fill-amber-400 text-amber-500' : 'size-4'} />
+          </Button>
 
           <Badge variant={snapshot.board.role === 'OWNER' ? 'default' : 'secondary'} className="hidden md:inline-flex">
             {BOARD_ROLE_LABELS[snapshot.board.role]}
           </Badge>
 
           <div className="ml-auto flex items-center gap-1 sm:gap-2">
+            {isOwner && !archived && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-muted-foreground"
+                    aria-label="Действия с доской"
+                    title="Действия с доской"
+                  >
+                    <MoreHorizontal className="size-4" />
+                    <span className="hidden lg:inline">Действия</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => void onSaveBoardAsTemplate()}>
+                    <Save className="size-4" />
+                    Сохранить как шаблон…
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => void onArchive()}>
+                    <Archive className="size-4" />
+                    В архив
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
             <MembersBar online={online} members={snapshot.members} />
             <span
               className={cn(
@@ -641,6 +821,34 @@ export function BoardPage() {
           </div>
         </div>
       </header>
+
+      {archived && (
+        <div className="border-b border-amber-500/30 bg-amber-500/10">
+          <div className="flex flex-wrap items-center gap-2 px-4 py-2 text-sm">
+            <Archive className="size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+            <span className="min-w-0 flex-1">
+              Доска в архиве — доступен только просмотр. Восстановите её, чтобы снова вносить изменения.
+            </span>
+            {isOwner && (
+              <>
+                <Button size="sm" variant="outline" onClick={() => void onRestore()}>
+                  <ArchiveRestore className="size-4" />
+                  Восстановить
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => void onDeleteBoard()}
+                >
+                  <Trash2 className="size-4" />
+                  Удалить
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <EmailVerificationBanner />
 
@@ -675,14 +883,17 @@ export function BoardPage() {
               editingByCard={editingByCard}
               members={snapshot.members}
               readOnly={!canEdit}
+              onSaveAsTemplate={(column) => void onSaveAsTemplate(column)}
             />
           ))}
 
           {canEdit && (
             <NewColumnForm
+              templates={templates}
               onCreate={(title) => {
                 ws.createColumn(title);
               }}
+              onCreateFromTemplate={(templateId) => ws.createColumnFromTemplate(templateId)}
             />
           )}
         </div>

@@ -10,6 +10,7 @@ import { authRouter } from './http/auth';
 import { boardsRouter } from './http/boards';
 import { usersRouter } from './http/users';
 import { createInvite, invitesRouter, joinRouter, listInvites } from './http/invites';
+import { boardTemplatesRouter, templatesRouter } from './http/templates';
 import { errorHandler } from './http/errors';
 import { registerSocketHandlers } from './ws';
 import { setIo } from './ws/emit';
@@ -31,6 +32,8 @@ boardsRouter.get('/:id/invites', listInvites);
 boardsRouter.post("/:id/invites", createInvite);
 app.use('/api/invites', invitesRouter);
 app.use('/api/join', joinRouter);
+app.use('/api/column-templates', templatesRouter);
+app.use('/api/board-templates', boardTemplatesRouter);
 
 // Прод: раздаём собранный клиентский бандл и SPA-fallback (в dev этим занимается Vite)
 const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../client/dist');

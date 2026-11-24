@@ -36,6 +36,39 @@ export type BoardDto = {
   createdAt: string;
   updatedAt: string;
   role: BoardRole;
+  /** null — доска активна; иначе в архиве (только просмотр) */
+  archivedAt: string | null;
+  /** Избранное — персональная отметка участника */
+  favorite: boolean;
+};
+
+/** Карточка внутри шаблона колонки (v2, фаза 15). */
+export type TemplateCard = {
+  title: string;
+  description: string | null;
+};
+
+export type ColumnTemplateDto = {
+  id: string;
+  title: string;
+  cards: TemplateCard[];
+  /** Системный шаблон (общий) или пользовательский */
+  system: boolean;
+};
+
+/** Колонка внутри шаблона доски (v2, фаза 15). */
+export type TemplateColumn = {
+  title: string;
+  cards: TemplateCard[];
+};
+
+/** Шаблон доски: набор колонок с карточками (FR-51). */
+export type BoardTemplateDto = {
+  id: string;
+  title: string;
+  columns: TemplateColumn[];
+  /** Системный шаблон (общий) или пользовательский */
+  system: boolean;
 };
 
 /** Участник доски с ролью и контактами (v2). Контакты видят только участники доски. */
@@ -96,9 +129,36 @@ export type BoardSnapshot = {
 
 export const createBoardSchema = z.object({
   title: z.string().min(1, 'Введите название').max(100, 'Не длиннее 100 символов'),
+  /** Создать доску из шаблона (FR-51): колонки и карточки копируются на сервере. */
+  templateId: z.string().min(1).optional(),
 });
 
-export const renameBoardSchema = createBoardSchema;
+export const renameBoardSchema = z.object({
+  title: z.string().min(1, 'Введите название').max(100, 'Не длиннее 100 символов'),
+});
+
+export const favoriteBoardSchema = z.object({
+  favorite: z.boolean(),
+});
+
+/** Сохранить колонку как шаблон (v2, фаза 15): карточки копируются на сервере. */
+export const saveColumnTemplateSchema = z.object({
+  columnId: z.string().min(1),
+  title: z.string().min(1, 'Введите название').max(100, 'Не длиннее 100 символов').optional(),
+});
+
+/** Создать колонку из шаблона по WS (v2, фаза 15). */
+export const createColumnFromTemplateSchema = z.object({
+  boardId: z.string().min(1),
+  templateId: z.string().min(1),
+  title: z.string().min(1).max(100).optional(),
+});
+
+/** Сохранить доску как шаблон (v2, FR-51): структура копируется на сервере. */
+export const saveBoardTemplateSchema = z.object({
+  boardId: z.string().min(1),
+  title: z.string().min(1, 'Введите название').max(100, 'Не длиннее 100 символов').optional(),
+});
 
 export const createColumnSchema = z.object({
   title: z.string().min(1, 'Введите название').max(100, 'Не длиннее 100 символов'),

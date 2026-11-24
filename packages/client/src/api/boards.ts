@@ -3,12 +3,15 @@
 import type { BoardDto, BoardRole, BoardSnapshot, InviteDto, MemberDto } from '@task-board/shared';
 import { api } from './http';
 
-export function listBoards(): Promise<{ boards: BoardDto[] }> {
-  return api<{ boards: BoardDto[] }>('/boards');
+export function listBoards(archived = false): Promise<{ boards: BoardDto[] }> {
+  return api<{ boards: BoardDto[] }>(archived ? '/boards?archived=1' : '/boards');
 }
 
-export function createBoard(title: string): Promise<{ board: BoardDto }> {
-  return api<{ board: BoardDto }>('/boards', { method: 'POST', body: JSON.stringify({ title }) });
+export function createBoard(title: string, templateId?: string): Promise<{ board: BoardDto }> {
+  return api<{ board: BoardDto }>('/boards', {
+    method: 'POST',
+    body: JSON.stringify(templateId ? { title, templateId } : { title }),
+  });
 }
 
 export function getBoard(id: string): Promise<BoardSnapshot> {
@@ -21,6 +24,23 @@ export function renameBoard(id: string, title: string): Promise<BoardSnapshot> {
 
 export function deleteBoard(id: string): Promise<{ ok: boolean }> {
   return api<{ ok: boolean }>(`/boards/${id}`, { method: 'DELETE' });
+}
+
+/** Архивирование (v2, FR-39): доска остаётся доступной только для просмотра. */
+export function archiveBoard(id: string): Promise<BoardSnapshot> {
+  return api<BoardSnapshot>(`/boards/${id}/archive`, { method: 'POST' });
+}
+
+export function restoreBoard(id: string): Promise<BoardSnapshot> {
+  return api<BoardSnapshot>(`/boards/${id}/restore`, { method: 'POST' });
+}
+
+/** Избранное (FR-40): персональная отметка, хранится на сервере. */
+export function setBoardFavorite(id: string, favorite: boolean): Promise<{ boardId: string; favorite: boolean }> {
+  return api<{ boardId: string; favorite: boolean }>(`/boards/${id}/favorite`, {
+    method: 'PATCH',
+    body: JSON.stringify({ favorite }),
+  });
 }
 
 // --- Участники и роли (v2, фаза 12) ---

@@ -1,6 +1,7 @@
 /** Контракт WS-мутаций для доски (используется компонентами доски). */
 export interface WsApi {
   createColumn: (title: string) => void;
+  createColumnFromTemplate: (templateId: string, title?: string) => void;
   renameColumn: (columnId: string, title: string) => void;
   deleteColumn: (columnId: string) => void;
   createCard: (columnId: string, title: string) => void;
