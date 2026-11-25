@@ -404,8 +404,18 @@ export function BoardsPage() {
             {visible.map((board) => (
               <Card
                 key={board.id}
-                className="group relative cursor-pointer py-0 transition-shadow hover:shadow-md"
+                role="button"
+                tabIndex={0}
+                aria-label={`Открыть доску «${board.title}»`}
+                className="group relative cursor-pointer py-0 transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 onClick={() => navigate(`/boards/${board.id}`)}
+                onKeyDown={(e) => {
+                  // Вложенные кнопки (звезда, меню) обрабатывают свои клавиши сами
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  navigate(`/boards/${board.id}`);
+                }}
               >
                 <CardContent className="flex min-h-24 flex-col justify-between gap-3 p-5">
                   <h2 className="line-clamp-2 pr-6 font-medium leading-snug">{board.title}</h2>
@@ -419,7 +429,7 @@ export function BoardsPage() {
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="size-7 text-muted-foreground hover:text-amber-500"
+                        className="size-8 text-muted-foreground hover:text-amber-500"
                         aria-label={board.favorite ? `Убрать «${board.title}» из избранного` : `Добавить «${board.title}» в избранное`}
                         aria-pressed={board.favorite}
                         onClick={(e) => {
@@ -436,7 +446,7 @@ export function BoardsPage() {
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="size-7 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                              className="size-8 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
                               aria-label={`Действия с доской «${board.title}»`}
                               onClick={(e) => e.stopPropagation()}
                             >

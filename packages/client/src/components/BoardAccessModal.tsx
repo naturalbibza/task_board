@@ -80,6 +80,7 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
       const res = await boardsApi.updateMember(props.boardId, member.id, role);
       setMembers((prev) => prev.map((m) => (m.id === member.id ? res.member : m)));
       setError(null);
+      toast.success(`Роль «${member.name}»: ${BOARD_ROLE_LABELS[role]}`);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -102,6 +103,7 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
         setInvites(invitesRes.invites);
       }
       setError(null);
+      toast.success(`«${member.name}» удалён из доски`);
     } catch (err) {
       setError((err as Error).message);
     }
@@ -127,6 +129,7 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
     try {
       const res = await boardsApi.revokeInvite(invite.id);
       setInvites((prev) => (prev ?? []).map((i) => (i.id === invite.id ? res.invite : i)));
+      toast.success('Ссылка отозвана');
     } catch (err) {
       setError((err as Error).message);
     }

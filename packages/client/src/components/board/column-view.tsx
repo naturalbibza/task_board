@@ -51,6 +51,7 @@ export function ColumnView(props: ColumnViewProps) {
     const title = newCardTitle.trim();
     if (!title) return;
     props.ws.createCard(props.column.id, title);
+    props.onNotice('Карточка добавлена');
     setNewCardTitle('');
   };
 
@@ -75,8 +76,11 @@ export function ColumnView(props: ColumnViewProps) {
     <section
       ref={setNodeRef}
       data-column-id={props.column.id}
+      tabIndex={0}
+      role="region"
+      aria-label={`Колонка «${props.column.title}»`}
       className={cn(
-        'flex max-h-[calc(100svh-7rem)] w-72 shrink-0 flex-col gap-2 rounded-xl border bg-muted/50 p-2.5',
+        'flex max-h-[calc(100svh-7rem)] w-72 shrink-0 flex-col gap-2 rounded-xl border bg-muted/50 p-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         isDragging && 'opacity-50 ring-2 ring-primary/40',
       )}
     >
@@ -112,9 +116,18 @@ export function ColumnView(props: ColumnViewProps) {
           </form>
         ) : (
           <h2
-            className="flex-1 cursor-text truncate px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+            tabIndex={0}
+            data-column-title
+            className="flex-1 cursor-text truncate rounded px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             title="Переименовать колонку"
             onClick={() => {
+              setTitleValue(props.column.title);
+              setEditingTitle(true);
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation();
               setTitleValue(props.column.title);
               setEditingTitle(true);
             }}
@@ -131,7 +144,7 @@ export function ColumnView(props: ColumnViewProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-7 text-muted-foreground"
+                className="size-8 text-muted-foreground"
                 aria-label="Действия с колонкой"
               >
                 <MoreHorizontal className="size-4" />
@@ -189,6 +202,7 @@ export function ColumnView(props: ColumnViewProps) {
             value={newCardTitle}
             onChange={(e) => setNewCardTitle(e.target.value)}
             placeholder="+ карточка"
+            aria-label={`Новая карточка в колонке «${props.column.title}»`}
             maxLength={200}
             className="h-8 border-transparent bg-transparent shadow-none hover:border-input focus-visible:bg-background dark:bg-transparent dark:focus-visible:bg-background/60"
           />

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useDraggable } from '@dnd-kit/core';
 import type { CardDto, ColumnDto, MemberDto } from '@task-board/shared';
@@ -39,6 +39,7 @@ export function CardView(props: CardViewProps) {
   const [title, setTitle] = useState(props.card.title);
   const [description, setDescription] = useState(props.card.description ?? '');
   const [targetColumnId, setTargetColumnId] = useState(props.card.columnId);
+  const cardRef = useRef<HTMLElement | null>(null);
 
   const editorName = props.editingBy
     ? (props.members.find((m) => m.id === props.editingBy)?.name ?? 'участник')
@@ -65,24 +66,29 @@ export function CardView(props: CardViewProps) {
       const columnTitle = props.columns.find((c) => c.id === targetColumnId)?.title;
       props.onNotice(columnTitle ? `Карточка перемещена в «${columnTitle}»` : 'Карточка перемещена');
     }
+    props.onNotice('Карточка сохранена');
     closeModal();
   };
 
   const remove = () => {
     if (!window.confirm('Удалить карточку?')) return;
     props.ws.deleteCard(props.card.id);
+    props.onNotice('Карточка удалена');
     closeModal();
   };
 
   return (
     <>
       <article
-        ref={setNodeRef}
+        ref={(node) => {
+          setNodeRef(node);
+          cardRef.current = node;
+        }}
         data-card-id={props.card.id}
         className={
           props.readOnly
-            ? 'rounded-lg border bg-card p-3 text-sm shadow-xs'
-            : 'group cursor-grab touch-manipulation rounded-lg border bg-card p-3 text-sm shadow-xs transition hover:border-primary/40 hover:shadow-sm active:cursor-grabbing'
+            ? 'rounded-lg border bg-card p-3 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+            : 'group cursor-grab touch-manipulation rounded-lg border bg-card p-3 text-sm shadow-xs transition hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:cursor-grabbing'
         }
         {...attributes}
         {...(props.readOnly ? {} : listeners)}
@@ -106,7 +112,14 @@ export function CardView(props: CardViewProps) {
           else closeModal();
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent
+          className="sm:max-w-lg"
+          onCloseAutoFocus={(event) => {
+            // Возвращаем фокус на карточку (FR-47): иначе после Esc он уходит в body
+            event.preventDefault();
+            cardRef.current?.focus();
+          }}
+        >
           <DialogHeader>
             <DialogTitle>Карточка</DialogTitle>
             <DialogDescription>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   DndContext,
@@ -178,12 +178,22 @@ export function BoardPage() {
     toast(message);
   }, []);
 
+  const onRenameBoard = async (title: string) => {
+    const result = await boardsApi.renameBoard(snapshot!.board.id, title);
+    setSnapshot(result);
+    toast.success('Название доски обновлено');
+  };
+
   // Мышь — с порогом 5 px; тач — «долгое нажатие» (220 мс), чтобы свайп
   // оставался прокруткой доски, а не превращался в случайный перенос.
+  // Enter не запускает перетаскивание: он открывает карточку (FR-45), drag — Space.
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 220, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space', 'Enter'] },
+    }),
   );
 
   const columns = useMemo(
@@ -220,6 +230,81 @@ export function BoardPage() {
     setCardPreviewState(null);
     setColumnOrderState(null);
   }, [setCardPreviewState, setColumnOrderState]);
+
+  /**
+   * Клавиатура на доске (FR-45): стрелки — между карточками/колонками,
+   * Enter — открыть карточку или перейти к полю «+ карточка», Esc закрывает модалку (Radix).
+   * Capture-фаза: Enter перехватываем до keyboard-сенсора dnd-kit, иначе он начнёт drag.
+   */
+  const onBoardKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+
+    const row = event.currentTarget;
+    const columnEls = [...row.querySelectorAll<HTMLElement>(':scope > [data-column-id]')];
+    const cardEl = target.closest<HTMLElement>('[data-card-id]');
+    // Кнопки/ссылки/ручки drag (в т.ч. заголовок колонки) обрабатывают клавиши сами
+    if (!cardEl && target.closest('button, a, [role="button"], [role="combobox"], [data-column-title]')) return;
+    const columnEl = target.closest<HTMLElement>('[data-column-id]');
+    const focusElement = (el: HTMLElement | null | undefined) => {
+      if (!el) return;
+      el.focus();
+      el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    };
+
+    if (event.key === 'Enter') {
+      if (cardEl) {
+        event.preventDefault();
+        event.stopPropagation();
+        cardEl.click();
+        return;
+      }
+      if (columnEl) {
+        // С клавиатуры на колонке Enter ведёт к добавлению карточки
+        const input = columnEl.querySelector<HTMLInputElement>('input[placeholder="+ карточка"]');
+        if (input) {
+          event.preventDefault();
+          input.focus();
+        }
+      }
+      return;
+    }
+
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) return;
+    if (!columnEls.length) return;
+    event.preventDefault();
+
+    const columnIndex = columnEl ? columnEls.indexOf(columnEl) : -1;
+    const cards = columnEl ? [...columnEl.querySelectorAll<HTMLElement>('[data-card-id]')] : [];
+    const cardIndex = cardEl ? cards.indexOf(cardEl) : -1;
+
+    if (cardIndex !== -1) {
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        const next = cards[cardIndex + (event.key === 'ArrowDown' ? 1 : -1)];
+        focusElement(next);
+        return;
+      }
+      // Влево/вправо — соседняя колонка, карточка на той же позиции (или сама колонка)
+      const nextColumn = columnEls[columnIndex + (event.key === 'ArrowRight' ? 1 : -1)];
+      if (!nextColumn) return;
+      const nextCards = [...nextColumn.querySelectorAll<HTMLElement>('[data-card-id]')];
+      focusElement(nextCards[Math.min(cardIndex, nextCards.length - 1)] ?? nextColumn);
+      return;
+    }
+
+    if (columnIndex !== -1) {
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        focusElement(columnEls[columnIndex + (event.key === 'ArrowRight' ? 1 : -1)]);
+        return;
+      }
+      // Вниз/вверх с колонки — к первой/последней карточке
+      const nextCards = [...columnEl!.querySelectorAll<HTMLElement>('[data-card-id]')];
+      focusElement(event.key === 'ArrowDown' ? nextCards[0] : nextCards[nextCards.length - 1]);
+      return;
+    }
+
+    focusElement(columnEls[0]);
+  };
 
   const onDragStart = (event: DragStartEvent) => {
     setCardPreviewState(null);
@@ -532,6 +617,7 @@ export function BoardPage() {
       createColumn: (title: string) => {
         if (!boardId || !guard()) return;
         socket.emit('column:create', { boardId, title });
+        toast.success('Колонка добавлена');
       },
       createColumnFromTemplate: (templateId: string, title?: string) => {
         if (!boardId || !guard()) return;
@@ -539,6 +625,7 @@ export function BoardPage() {
           'column:create-from-template',
           title?.trim() ? { boardId, templateId, title: title.trim() } : { boardId, templateId },
         );
+        toast.success('Колонка добавлена из шаблона');
       },
       renameColumn: (columnId: string, title: string) => {
         if (!guard()) return;
@@ -547,6 +634,7 @@ export function BoardPage() {
       deleteColumn: (columnId: string) => {
         if (!guard()) return;
         socket.emit('column:delete', { id: columnId });
+        toast.success('Колонка удалена');
       },
       createCard: (columnId: string, title: string) => {
         if (!guard()) return;
@@ -745,7 +833,7 @@ export function BoardPage() {
           <BoardTitle
             title={snapshot.board.title}
             canRename={can(snapshot.board.role, 'renameBoard') && !archived}
-            onRename={async (title) => setSnapshot(await boardsApi.renameBoard(snapshot.board.id, title))}
+            onRename={onRenameBoard}
             onError={setError}
           />
 
@@ -863,7 +951,13 @@ export function BoardPage() {
         }}
         onDragCancel={clearDrag}
       >
-        <div data-columns-row className="flex flex-1 items-start gap-3 overflow-x-auto overflow-y-hidden p-3 sm:p-4">
+        <div
+          data-columns-row
+          role="group"
+          aria-label="Колонки доски"
+          onKeyDownCapture={onBoardKeyDown}
+          className="flex flex-1 items-start gap-3 overflow-x-auto overflow-y-hidden p-3 sm:p-4"
+        >
           {displayColumns.length === 0 && (
             <div className="flex w-72 shrink-0 flex-col items-center gap-2 rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
               <LayoutGrid className="size-5" />

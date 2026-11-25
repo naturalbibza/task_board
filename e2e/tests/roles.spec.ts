@@ -35,7 +35,7 @@ test('роли: VIEWER не редактирует, после смены на E
   const linkText = await linkRow.innerText();
   const token = linkText.match(/\/join\/([\w-]+)/)?.[1];
   expect(token).toBeTruthy();
-  await dialog.getByRole('button', { name: 'Закрыть' }).click();
+  await dialog.getByRole('button', { name: 'Закрыть', exact: true }).click();
 
   // --- B: отдельный контекст, вступает по ссылке ---
   const contextB = await browser.newContext({ baseURL: 'http://localhost:5174' });
@@ -56,7 +56,7 @@ test('роли: VIEWER не редактирует, после смены на E
   await expect(pageB.getByRole('dialog')).toBeVisible();
   await expect(pageB.getByLabel('Заголовок')).toBeDisabled();
   await expect(pageB.getByRole('button', { name: 'Сохранить' })).toHaveCount(0);
-  await pageB.getByRole('button', { name: 'Закрыть' }).click();
+  await pageB.getByRole('button', { name: 'Закрыть', exact: true }).click();
 
   // --- A меняет роль B на EDITOR через API; B обновляется по WS ---
   const membersRes = await page.request.get(`/api/boards/${boardId}/members`);
