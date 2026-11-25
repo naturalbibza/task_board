@@ -38,7 +38,7 @@ test('роли: VIEWER не редактирует, после смены на E
   await dialog.getByRole('button', { name: 'Закрыть', exact: true }).click();
 
   // --- B: отдельный контекст, вступает по ссылке ---
-  const contextB = await browser.newContext({ baseURL: 'http://localhost:5174' });
+  const contextB = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174' });
   const pageB = await contextB.newPage();
   await register(pageB, 'viewer');
   await pageB.goto(`/join/${token}`);

@@ -1,7 +1,7 @@
 // Шаринг (US-10–12, FR-15–17): инвайты (ссылка и email) и вступление.
 import { Router } from 'express';
 import { randomBytes } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gt, sql } from 'drizzle-orm';
 import type { RequestHandler, Request } from 'express';
 import { BOARD_ROLE_LABELS, createInviteSchema, type InviteDto } from '@task-board/shared';
 import { db } from '../db';
@@ -15,6 +15,7 @@ import { inviteMessage } from '../mail/templates';
 export const joinRouter = Router();
 
 const INVITE_TTL_DAYS = 7;
+const INVITE_RATE_LIMIT = 20; // FR-38: не более 20 приглашений в час на пользователя
 
 type InviteRow = typeof invites.$inferSelect;
 
@@ -47,6 +48,13 @@ export const createInvite: RequestHandler<{ id: string }> = async (req, res) => 
   const userId = await requireUserId(req);
   const access = await boardAccess(userId, req.params.id);
   requireAction(access, 'invite');
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(invites)
+    .where(and(eq(invites.createdBy, userId), gt(invites.createdAt, new Date(Date.now() - 60 * 60 * 1000))));
+  if (count >= INVITE_RATE_LIMIT) {
+    throw new HttpError(429, 'RATE_LIMITED', 'Слишком много приглашений — попробуйте через час');
+  }
   const { role, email } = createInviteSchema.parse(req.body ?? {});
   const inviteRole = role ?? 'EDITOR';
   const inviteEmail = email ? email.toLowerCase().trim() : null;

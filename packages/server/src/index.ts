@@ -15,6 +15,7 @@ import { errorHandler } from './http/errors';
 import { registerSocketHandlers } from './ws';
 import { setIo } from './ws/emit';
 import type { ClientToServerEvents, ServerToClientEvents } from '@task-board/shared';
+import { API_VERSION } from '@task-board/shared';
 
 const app = express();
 
@@ -22,7 +23,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'task-board-server' });
+  res.json({ status: 'ok', service: 'task-board-server', apiVersion: API_VERSION });
 });
 
 app.use('/api/auth', authRouter);

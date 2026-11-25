@@ -24,7 +24,7 @@ test.describe('профиль и сессии', () => {
     await register(page, email);
 
     // Вторая сессия того же аккаунта (старый пароль) — её потом инвалидируем
-    const ctxB = await browser.newContext({ baseURL: 'http://localhost:5174' });
+    const ctxB = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174' });
     const pageB = await ctxB.newPage();
     await login(pageB, email, 'password123');
 
@@ -56,7 +56,7 @@ test.describe('профиль и сессии', () => {
     await expect(pageB).toHaveURL(/\/login$/);
 
     // Новый пароль работает
-    const ctxC = await browser.newContext({ baseURL: 'http://localhost:5174' });
+    const ctxC = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174' });
     const pageC = await ctxC.newPage();
     await login(pageC, email, 'password456');
 
@@ -100,7 +100,7 @@ test.describe('профиль и сессии', () => {
     expect(inviteRes.ok()).toBeTruthy();
     const { invite } = (await inviteRes.json()) as { invite: { token: string } };
 
-    const ctxB = await browser.newContext({ baseURL: 'http://localhost:5174' });
+    const ctxB = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174' });
     const pageB = await ctxB.newPage();
     await register(pageB, uniqueEmail('contact-b'));
     await pageB.goto(`/join/${invite.token}`);

@@ -49,13 +49,13 @@ test('приглашение по email: вступить может тольк�
   await expect(page).toHaveURL(/\/boards\/[0-9a-f-]+$/);
 
   // B — существует, но не подтверждён (вступать можно)
-  const ctxB = await browser.newContext({ baseURL: 'http://localhost:5174' });
+  const ctxB = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174' });
   const pageB = await ctxB.newPage();
   const emailB = uniqueEmail('mail-b');
   await registerOnly(pageB, emailB, 'Приглашённый');
 
   // C — другой пользователь, попробует ту же ссылку
-  const ctxC = await browser.newContext({ baseURL: 'http://localhost:5174' });
+  const ctxC = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174' });
   const pageC = await ctxC.newPage();
   await registerAndVerify(pageC, uniqueEmail('mail-c'), 'Чужой');
 
@@ -95,7 +95,7 @@ test('ссылка-приглашение без email работает для �
   const token = linkText.match(/\/join\/([\w-]+)/)?.[1];
   expect(token).toBeTruthy();
 
-  const ctxB = await browser.newContext({ baseURL: 'http://localhost:5174' });
+  const ctxB = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174' });
   const pageB = await ctxB.newPage();
   await registerOnly(pageB, uniqueEmail('link-b'), 'Любой');
   await pageB.goto(`/join/${token}`);

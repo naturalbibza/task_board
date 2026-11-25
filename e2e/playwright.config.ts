@@ -5,6 +5,8 @@ import { defineConfig, devices } from '@playwright/test';
  * Адрес можно переопределить: E2E_BASE_URL=http://localhost:5173 pnpm e2e
  */
 const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5174';
+// Локально — установленный Edge; в CI — скачанный Chromium (channel не задаём).
+const channel = process.env.CI ? undefined : ('msedge' as const);
 
 export default defineConfig({
   testDir: './tests',
@@ -26,8 +28,8 @@ export default defineConfig({
     {
       name: 'chromium',
       // Локально используем установленный Edge (не нужен скачиваемый Chromium);
-      // в CI — `pnpm --filter @task-board/e2e exec playwright install chromium` и channel убрать.
-      use: { ...devices['Desktop Chrome'], channel: 'msedge' },
+      // в CI channel не задаётся — Playwright берёт установленный Chromium.
+      use: { ...devices['Desktop Chrome'], ...(channel ? { channel } : {}) },
     },
   ],
 });

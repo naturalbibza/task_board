@@ -7,3 +7,4 @@ export * from './permissions';
 export * from './labels';
 export * from './templates';
 export * from './ws-events';
+export * from './version';

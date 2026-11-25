@@ -35,7 +35,7 @@ test('после смены аккаунта права применяются �
   const { invite } = (await inviteRes.json()) as { invite: { token: string } };
 
   // --- B: регистрация и вступление (отдельный контекст, чтобы не мешать) ---
-  const ctxB = await browser.newContext({ baseURL: 'http://localhost:5174' });
+  const ctxB = await browser.newContext({ baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5174' });
   const pageB = await ctxB.newPage();
   await register(pageB, emailB, 'Наблюдатель Переключатель');
   await pageB.goto(`/join/${invite.token}`);
