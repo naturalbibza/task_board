@@ -4,7 +4,7 @@ import { desc, eq, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 import type { Request, RequestHandler, Response } from 'express';
 import { loginSchema, registerSchema, verifyEmailSchema } from '@task-board/shared';
-import { db } from '../db';
+import { db, env } from '../db';
 import { emailVerifications, users } from '../db/schema';
 import { HttpError } from './errors';
 import { clearSessionCookie, requireUserId, setSessionCookie, toUserDto, COOKIE_NAME, verifySessionToken } from './session';
@@ -55,8 +55,11 @@ const register: RequestHandler = async (req, res: Response) => {
   try {
     const [user] = await db.insert(users).values({ email, passwordHash, name }).returning();
     await setSessionCookie(res, user.id, user.tokenVersion);
-    // Письмо подтверждения — в фоне, регистрацию не задерживаем
-    void sendVerification(req, user).catch((err) => console.error('[mail] подтверждение:', err));
+    // Письмо подтверждения — в фоне, регистрацию не задерживаем.
+    // При скрытом подтверждении письма не отправляем (код сохранён для включения флагом).
+    if (env.REQUIRE_EMAIL_VERIFICATION) {
+      void sendVerification(req, user).catch((err) => console.error('[mail] подтверждение:', err));
+    }
     res.status(201).json({ user: toUserDto(user) });
   } catch (err) {
     if (isUniqueViolation(err)) {
@@ -147,7 +150,7 @@ const resendVerification: RequestHandler = async (req, res) => {
   if (!user) {
     throw new HttpError(401, 'UNAUTHORIZED', 'Требуется вход');
   }
-  if (user.emailVerifiedAt) {
+  if (!env.REQUIRE_EMAIL_VERIFICATION || user.emailVerifiedAt) {
     res.json({ ok: true, alreadyVerified: true });
     return;
   }

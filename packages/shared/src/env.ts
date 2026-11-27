@@ -19,6 +19,14 @@ export const serverEnvSchema = z
     COOKIE_DOMAIN: z.preprocess(emptyToUndefined, z.string().optional()),
     ORIGIN: z.preprocess(emptyToUndefined, z.url().optional()),
 
+    // --- Подтверждение email (v2) ---
+    // 1 — включено: письма подтверждения + ограничения FR-32.
+    // 0 (по умолчанию) — скрыто: письма не отправляются, аккаунт считается подтверждённым.
+    // Код и страницы подтверждения сохраняются; режим переключается без миграций.
+    REQUIRE_EMAIL_VERIFICATION: z
+      .preprocess((v) => (v === undefined || v === '' ? undefined : v === '1' || v === 'true'), z.boolean())
+      .default(false),
+
     // --- Почта (v2, фаза 14) ---
     // console — письма в .localmail/ + лог (dev/офлайн), smtp — Яндекс SMTP на проде
     MAIL_MODE: z.preprocess(emptyToUndefined, z.enum(['console', 'smtp'])).default('console'),

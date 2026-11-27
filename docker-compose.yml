@@ -19,6 +19,8 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       MAIL_FROM: ${MAIL_FROM:-}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Task Board}
+      # Подтверждение email: по умолчанию скрыто (0); 1 — включить письма и ограничения FR-32
+      REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-0}
     depends_on:
       db:
         condition: service_healthy

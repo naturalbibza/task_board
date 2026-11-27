@@ -82,5 +82,12 @@ export async function requireUserId(
 }
 
 export function toUserDto(user: User): UserDto {
-  return { id: user.id, name: user.name, email: user.email, emailVerified: user.emailVerifiedAt !== null };
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    // При скрытом подтверждении (REQUIRE_EMAIL_VERIFICATION=0) считаем аккаунт подтверждённым:
+    // UI не показывает баннеры, ограничения FR-32 не применяются. В БД emailVerifiedAt не трогаем.
+    emailVerified: !env.REQUIRE_EMAIL_VERIFICATION || user.emailVerifiedAt !== null,
+  };
 }

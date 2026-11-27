@@ -17,7 +17,7 @@ import {
   type MemberDto,
   type TemplateColumn,
 } from '@task-board/shared';
-import { db } from '../db';
+import { db, env } from '../db';
 import { boardMembers, boards, boardTemplates, cards, columns, invites, users } from '../db/schema';
 import { HttpError } from './errors';
 import { requireUserId } from './session';
@@ -88,7 +88,7 @@ export async function boardAccess(userId: string, boardId: string): Promise<Acce
     boardId: row.boardId,
     title: row.title,
     role: normalizeRole(row.role),
-    verified: row.emailVerifiedAt !== null,
+    verified: !env.REQUIRE_EMAIL_VERIFICATION || row.emailVerifiedAt !== null,
     archived: row.archivedAt !== null,
     favorite: row.favorite,
   };
@@ -213,7 +213,7 @@ const createBoard: RequestHandler<{ id: string }> = async (req, res) => {
     .select({ emailVerifiedAt: users.emailVerifiedAt })
     .from(users)
     .where(eq(users.id, userId));
-  if (!account?.emailVerifiedAt) {
+  if (env.REQUIRE_EMAIL_VERIFICATION && !account?.emailVerifiedAt) {
     throw new HttpError(403, 'EMAIL_NOT_VERIFIED', 'Подтвердите email, чтобы создавать доски');
   }
   const { title, templateId } = createBoardSchema.parse(req.body);

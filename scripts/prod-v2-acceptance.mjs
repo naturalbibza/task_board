@@ -142,5 +142,34 @@ try {
   }
 }
 
+// 9. Скрытое подтверждение email (REQUIRE_EMAIL_VERIFICATION=0, FR-52)
+const hiddenEmail = `accept-hidden-${suffix}@test.dev`;
+const regRes = await fetch(`${API}/auth/register`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ email: hiddenEmail, password: 'password123', name: 'Acceptance hidden' }),
+});
+const regBody = await json(regRes);
+const hiddenCookie = regRes.headers.get('set-cookie')?.split(';')[0];
+check(
+  'подтверждение скрыто: новый аккаунт сразу подтверждён (FR-52)',
+  regRes.status === 201 && regBody?.user?.emailVerified === true,
+  regBody?.user?.emailVerified === undefined ? 'нет поля' : `emailVerified=${regBody.user.emailVerified}`,
+);
+
+const hiddenBoardRes = await fetch(`${API}/boards`, {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Cookie: hiddenCookie },
+  body: JSON.stringify({ title: `accept-hidden-${suffix}` }),
+});
+const hiddenBoard = await json(hiddenBoardRes);
+check('подтверждение скрыто: доска создаётся без письма', hiddenBoardRes.status === 201);
+if (hiddenBoard?.board?.id) {
+  await fetch(`${API}/boards/${hiddenBoard.board.id}`, {
+    method: 'DELETE',
+    headers: { Cookie: hiddenCookie },
+  }).catch(() => undefined);
+}
+
 console.log(results.join('\n'));
 console.log(`\nИтого: ${results.filter((r) => r.startsWith('✅')).length}/${results.length}`);

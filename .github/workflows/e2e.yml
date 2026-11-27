@@ -36,8 +36,8 @@ jobs:
       # БД — встроенный PostgreSQL (USE_EXTERNAL_DB=0), как в офлайн-режиме.
       - name: Start server
         run: |
-          USE_EXTERNAL_DB=0 MAIL_MODE=console nohup pnpm --filter @task-board/server start \
-            > /tmp/server.log 2>&1 &
+          USE_EXTERNAL_DB=0 MAIL_MODE=console REQUIRE_EMAIL_VERIFICATION=1 \
+            nohup pnpm --filter @task-board/server start > /tmp/server.log 2>&1 &
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:3001/api/health; then echo; exit 0; fi
             sleep 2
