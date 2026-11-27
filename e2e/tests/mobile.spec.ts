@@ -6,8 +6,8 @@ import { registerAndVerify, uniqueEmail } from './helpers';
  * внутри доски, модалки помещаются в экран и прокручиваются.
  */
 
-// Типичный телефон: 390×700 (близко к iPhone 12/13/14)
-test.use({ viewport: { width: 390, height: 700 } });
+// Минимальный поддерживаемый телефон по спеке: 360×700, тач-ввод (pointer: coarse)
+test.use({ viewport: { width: 360, height: 700 }, hasTouch: true });
 
 async function createBoard(page: Page): Promise<void> {
   await page.getByLabel('Название новой доски').fill('Мобильная доска');
@@ -26,6 +26,13 @@ test('мобильные размеры: колонки скроллятся, м
     innerWidth: window.innerWidth,
   }));
   expect(scrollWidth).toBeLessThanOrEqual(innerWidth + 1);
+
+  // FR-21: тап-цели на touch не меньше 44×44 px
+  const favorite = page.getByRole('button', { name: 'Добавить доску в избранное' });
+  const favoriteBox = await favorite.boundingBox();
+  expect(favoriteBox).not.toBeNull();
+  expect(favoriteBox!.width).toBeGreaterThanOrEqual(44);
+  expect(favoriteBox!.height).toBeGreaterThanOrEqual(44);
 
   const column = page.locator('[data-column-id]').first();
   const input = column.getByPlaceholder('+ карточка');

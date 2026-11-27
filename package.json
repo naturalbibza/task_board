@@ -27,5 +27,6 @@
     "onlyBuiltDependencies": [
       "esbuild"
     ]
-  }
+  },
+  "version": "2.0.0"
 }

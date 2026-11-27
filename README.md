@@ -159,11 +159,12 @@ SMTP не ломают регистрацию/приглашение (пишут
 | V7 | Архив, избранное, поиск, сортировка | ✅ e2e + прод-приёмка |
 | V8 | Шаблоны колонок и досок: сохранение и вставка | ✅ e2e + прод-приёмка |
 | V9 | Тёмная тема и адаптив (телефон без скролла страницы) | ✅ `e2e/mobile.spec.ts` + скриншоты |
-| V10 | Регресс v1 (A1–A8), актуальный `docs/api-contract.md` | ✅ e2e + ревью контракта |
+| V10 | Регресс v1 (A1–A8), актуальный `docs/api-contract.md` | ✅ прод 2026-11-27: `offline-sync` 18/18, `prod-phase89` 7/7, `phase9` 10/10 + e2e |
 
 ### Регресс v1 (A1–A8)
 
-Полный прогон на проде — 2026-11-14, все критерии пройдены.
+Полный прогон на проде — 2026-11-14; повторно на v2 — **2026-11-27** (`offline-sync` 18/18,
+`prod-phase89` 7/7, `phase9` 10/10), все критерии пройдены.
 
 | # | Критерий | Результат |
 |---|---|---|
@@ -184,7 +185,7 @@ SMTP не ломают регистрацию/приглашение (пишут
 pnpm typecheck                      # tsc --noEmit во всех пакетах
 pnpm lint                           # eslint
 pnpm build                          # сборка client + server
-pnpm e2e                            # Playwright (нужен запущенный `pnpm dev`)
+pnpm e2e                            # Playwright (нужен `pnpm dev`; почтовые тесты пропустятся при скрытом подтверждении)
 pnpm --filter @task-board/e2e exec playwright test tests/keyboard.spec.ts
 node scripts/offline-sync-test.mjs  # офлайн-синхронизация, 18 проверок
 node scripts/phase9-test.mjs        # invite-ссылки (A3/A4), локально

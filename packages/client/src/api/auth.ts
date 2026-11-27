@@ -1,7 +1,7 @@
 import type { LoginInput, RegisterInput, UserDto } from '@task-board/shared';
 import { api } from './http';
 
-type AuthResponse = { user: UserDto };
+type AuthResponse = { user: UserDto; emailVerificationRequired?: boolean };
 
 export function register(input: RegisterInput): Promise<AuthResponse> {
   return api<AuthResponse>('/auth/register', { method: 'POST', body: JSON.stringify(input) });

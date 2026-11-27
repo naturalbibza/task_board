@@ -10,6 +10,7 @@ import {
 } from '@task-board/shared';
 import { toast } from 'sonner';
 import * as usersApi from '../api/users';
+import * as authApi from '../api/auth';
 import { errorText, useAuth } from '../state/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,7 +25,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 const MESSENGER_TYPES = messengerTypeSchema.options;
 
 export function ProfilePage() {
-  const { user, loading, refresh } = useAuth();
+  const { user, loading, refresh, emailVerificationRequired } = useAuth();
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState<UserProfileDto | null>(null);
@@ -40,6 +41,7 @@ export function ProfilePage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [savingPassword, setSavingPassword] = useState(false);
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -120,6 +122,19 @@ export function ProfilePage() {
     }
   };
 
+  const resendVerification = async () => {
+    setResending(true);
+    try {
+      const res = await authApi.resendVerification();
+      toast.success(res.alreadyVerified ? 'Email уже подтверждён' : 'Письмо отправлено — проверьте почту');
+      if (res.alreadyVerified) await refresh();
+    } catch (err) {
+      toast.error(errorText(err));
+    } finally {
+      setResending(false);
+    }
+  };
+
   const logoutAll = async () => {
     if (!window.confirm('Завершить все сессии, кроме текущей? На других устройствах потребуется повторный вход.')) {
       return;
@@ -181,6 +196,29 @@ export function ProfilePage() {
                 <div className="grid gap-2">
                   <Label htmlFor="profile-email">Email</Label>
                   <Input id="profile-email" value={profile.email} readOnly disabled />
+                  {/* Статус подтверждения — только когда режим включён (FR-52) */}
+                  {emailVerificationRequired && (
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      {user.emailVerified ? (
+                        <span className="text-emerald-600 dark:text-emerald-400">Email подтверждён</span>
+                      ) : (
+                        <>
+                          <span className="text-amber-600 dark:text-amber-400">
+                            Email не подтверждён — доступ к созданию досок и приглашениям ограничен
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={resending}
+                            onClick={() => void resendVerification()}
+                          >
+                            {resending ? 'Отправляем…' : 'Отправить письмо'}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="profile-name">Имя</Label>

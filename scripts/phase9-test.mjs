@@ -1,7 +1,7 @@
 // E2E фазы 9 (A3/A4): invite-ссылки — создание, вступление, отзыв, неавторизованный 401.
-// Запуск: pnpm --filter @task-board/client exec node ../../scripts/phase9-test.mjs
+// Запуск: node scripts/phase9-test.mjs [BASE_URL] (по умолчанию http://localhost:3001)
 
-const BASE = 'http://localhost:3001/api';
+const BASE = `${(process.argv[2] ?? 'http://localhost:3001').replace(/\/$/, '')}/api`;
 
 const results = [];
 const check = (name, cond) => {

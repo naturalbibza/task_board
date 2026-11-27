@@ -60,7 +60,7 @@ const register: RequestHandler = async (req, res: Response) => {
     if (env.REQUIRE_EMAIL_VERIFICATION) {
       void sendVerification(req, user).catch((err) => console.error('[mail] подтверждение:', err));
     }
-    res.status(201).json({ user: toUserDto(user) });
+    res.status(201).json({ user: toUserDto(user), emailVerificationRequired: env.REQUIRE_EMAIL_VERIFICATION });
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new HttpError(409, 'EMAIL_TAKEN', 'Этот email уже зарегистрирован');
@@ -76,7 +76,7 @@ const login: RequestHandler = async (req, res: Response) => {
     throw new HttpError(401, 'BAD_CREDENTIALS', 'Неверный email или пароль');
   }
   await setSessionCookie(res, user.id, user.tokenVersion);
-  res.json({ user: toUserDto(user) });
+  res.json({ user: toUserDto(user), emailVerificationRequired: env.REQUIRE_EMAIL_VERIFICATION });
 };
 
 const logout: RequestHandler = async (req, res) => {
@@ -110,7 +110,7 @@ const me: RequestHandler = async (req, res) => {
   if (!user) {
     throw new HttpError(401, 'UNAUTHORIZED', 'Требуется вход');
   }
-  res.json({ user: toUserDto(user) });
+  res.json({ user: toUserDto(user), emailVerificationRequired: env.REQUIRE_EMAIL_VERIFICATION });
 };
 
 /** Подтверждение email по токену из письма (FR-31). Идемпотентно: повторное открытие ссылки — успех. */

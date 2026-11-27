@@ -117,7 +117,11 @@ export function BoardAccessModal(props: BoardAccessModalProps) {
       setInvites((prev) => [...(prev ?? []), res.invite]);
       setInviteEmail('');
       setError(null);
-      toast.success(email ? `Приглашение отправлено на ${email}` : 'Ссылка создана');
+      if (email && !res.emailSent) {
+        toast.error('Ссылка создана, но письмо не отправлено — скопируйте её и отправьте вручную');
+      } else {
+        toast.success(email ? `Приглашение отправлено на ${email}` : 'Ссылка создана');
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {

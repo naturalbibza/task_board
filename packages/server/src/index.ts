@@ -23,7 +23,12 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'task-board-server', apiVersion: API_VERSION });
+  res.json({
+    status: 'ok',
+    service: 'task-board-server',
+    apiVersion: API_VERSION,
+    emailVerificationRequired: env.REQUIRE_EMAIL_VERIFICATION,
+  });
 });
 
 app.use('/api/auth', authRouter);

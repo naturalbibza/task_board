@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { registerAndVerify, uniqueEmail } from './helpers';
+import { isEmailVerificationRequired, registerAndVerify, uniqueEmail } from './helpers';
 
 /**
  * Фаза 13: профиль и контакты (FR-28–29), смена пароля и «выйти везде» (FR-30, FR-33).
@@ -31,6 +31,12 @@ test.describe('профиль и сессии', () => {
     // --- профиль ---
     await page.goto('/profile');
     await expect(page.getByLabel('Email')).toBeDisabled();
+    // Статус email показывается только при включённом подтверждении (FR-52)
+    if (await isEmailVerificationRequired()) {
+      await expect(page.getByText('Email подтверждён')).toBeVisible();
+    } else {
+      await expect(page.getByText('Email подтверждён')).toHaveCount(0);
+    }
     await page.getByLabel('Имя').fill('Анна Профиль');
     await page.getByLabel('О себе').fill('Тестирую профиль');
     await page.getByLabel('Телефон').fill('+7 900 000-00-00');

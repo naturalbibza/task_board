@@ -65,10 +65,12 @@ export const createInvite: RequestHandler<{ id: string }> = async (req, res) => 
     .values({ boardId: req.params.id, token, expiresAt, createdBy: userId, role: inviteRole, email: inviteEmail })
     .returning();
 
-  // Приглашение по адресу (FR-26): письмо уходит в фоне, ошибка не ломает ответ
+  // Приглашение по адресу (FR-26): письмо уходит в фоне, ошибка не ломает ответ.
+  // Флаг emailSent говорит клиенту, нужно ли предложить отправить ссылку вручную (FR-37).
+  let emailSent = true;
   if (inviteEmail) {
     const [inviter] = await db.select().from(users).where(eq(users.id, userId));
-    await sendMailSafely({
+    emailSent = await sendMailSafely({
       to: inviteEmail,
       ...inviteMessage({
         boardTitle: access.title,
@@ -79,7 +81,7 @@ export const createInvite: RequestHandler<{ id: string }> = async (req, res) => 
     });
   }
 
-  res.status(201).json({ invite: inviteDto(invite) });
+  res.status(201).json({ invite: inviteDto(invite), emailSent });
 };
 
 // --- Отзыв (монтируется в invitesRouter: /invites/:id) ---

@@ -191,10 +191,11 @@ JWT: добавляется claim `ver` (tokenVersion). `requireUserId` и WS-ha
 
 ## 10. E2E (Playwright)
 
-- Отдельный workspace-пакет `e2e/`: конфиг, `globalSetup` (регистрация тестовых
-  пользователей через API), `storageState` для авторизации.
-- Запуск по требованию: `pnpm e2e`, `pnpm e2e:ui`; в CI — отдельная job с `workflow_dispatch`
-  и на релизных фазах (NFR-14), не на каждый push.
+- Отдельный workspace-пакет `e2e/`: конфиг; каждый тест создаёт уникального пользователя
+  через UI (`helpers.ts`). Почтовые тесты пропускаются, если подтверждение email скрыто
+  (FR-52), а в CI сервер стартует с `REQUIRE_EMAIL_VERIFICATION=1`.
+- Запуск по требованию: `pnpm e2e`, `pnpm e2e:ui`; в CI — workflow **e2e**
+  (`workflow_dispatch`), не на каждый push (NFR-14).
 - Почта в тестах: `MAIL_MODE=console` → тест читает последний `.eml` из `.localmail/`.
 - Наборы: auth, доски (CRUD/архив/избранное/поиск), DnD, роли, профиль/пароль,
   подтверждение email, приглашения, шаблоны колонок и досок, клавиатура, мобильный viewport.

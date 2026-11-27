@@ -24,6 +24,12 @@
 - Смена пароля и `logout-all` инкрементируют `users.tokenVersion`: старые cookie и
   сокеты становятся недействительными (`401 SESSION_INVALID`).
 
+**Подтверждение email (FR-52).** Режим задаёт сервер: поле `emailVerificationRequired`
+в `GET /api/health` и в ответах auth. При `false` письма не отправляются, `emailVerified`
+всегда `true`, ограничения FR-32 не действуют (страница `/verify-email` сохранена для
+старых ссылок). При `true` действуют FR-31/FR-32: письмо, токен 24 ч, повторная отправка
+не чаще 1/мин.
+
 ## Ошибки
 
 Единый формат (NFR-8):
@@ -55,17 +61,17 @@
 
 | Метод | Путь | Ответ |
 |---|---|---|
-| GET | `/api/health` | `{ status: "ok", service: "task-board-server", apiVersion: "2.0" }` |
+| GET | `/api/health` | `{ status: "ok", service: "task-board-server", apiVersion: "2.0", emailVerificationRequired: false }` |
 
 ### Auth
 
 | Метод | Путь | Тело | Ответ |
 |---|---|---|---|
-| POST | `/api/auth/register` | `{ email, password (≥8), name? }` | `201 { user }` + cookie |
-| POST | `/api/auth/login` | `{ email, password }` | `{ user }` + cookie |
+| POST | `/api/auth/register` | `{ email, password (≥8), name? }` | `201 { user, emailVerificationRequired }` + cookie |
+| POST | `/api/auth/login` | `{ email, password }` | `{ user, emailVerificationRequired }` + cookie |
 | POST | `/api/auth/logout` | — | `{ ok: true }`, cookie сброшена, сокеты закрыты |
 | POST | `/api/auth/logout-all` | — | `{ ok: true }`, все прочие сессии недействительны |
-| GET | `/api/auth/me` | — | `{ user }` |
+| GET | `/api/auth/me` | — | `{ user, emailVerificationRequired }` |
 | POST | `/api/auth/verify-email` | `{ token }` | `{ ok, alreadyVerified? }` (идемпотентно) |
 | POST | `/api/auth/resend-verification` | — | `{ ok, alreadyVerified? }`; 429 чаще 1/мин |
 
@@ -119,13 +125,15 @@
 | Метод | Путь | Тело | Ответ |
 |---|---|---|---|
 | GET | `/api/boards/:id/invites` | — | `{ invites: InviteDto[] }` (нужно право `invite`) |
-| POST | `/api/boards/:id/invites` | `{ role?, email? }` | `201 { invite }`; лимит 20/час на пользователя |
+| POST | `/api/boards/:id/invites` | `{ role?, email? }` | `201 { invite, emailSent }`; лимит 20/час на пользователя |
 | PATCH | `/api/invites/:id` | — | `{ invite }` — отзыв |
 | GET | `/api/join/:token` | — | `{ boardId, boardTitle }`; без входа — `401` |
 
 `InviteDto = { id, token, expiresAt, revoked, role, email }`.
 Срок ссылки — 7 дней. Приглашение с `email` принимает только этот адрес
 (`INVITE_EMAIL_MISMATCH`). Вступление повторно — успех без смены роли.
+`emailSent: false` в ответе означает, что ссылка создана, но письмо не ушло
+(показать пользователю предложение скопировать ссылку вручную).
 
 ### Шаблоны
 

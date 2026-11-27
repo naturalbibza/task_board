@@ -131,3 +131,29 @@
       sans-serif;
   }
 }
+
+/* FR-21: на тач-устройствах кликабельные цели не меньше 44×44 px.
+   Селектор по pointer: coarse, чтобы не менять плотный десктопный интерфейс. */
+@media (pointer: coarse) {
+  button:not([data-compact]),
+  [role='button']:not([data-compact]),
+  [role='menuitem'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  [role='tablist'] {
+    height: auto;
+  }
+
+  [role='tab'] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  [data-column-title] {
+    display: flex;
+    min-height: 44px;
+    align-items: center;
+  }
+}

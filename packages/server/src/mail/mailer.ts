@@ -76,19 +76,20 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * Отправка «в фоне»: ошибка письма не должна ломать регистрацию/приглашение.
  * 3 попытки, ошибки — в лог.
  */
-export async function sendMailSafely(message: MailMessage): Promise<void> {
+export async function sendMailSafely(message: MailMessage): Promise<boolean> {
   for (let attempt = 1; attempt <= 3; attempt += 1) {
     try {
       await getMailer().send(message);
-      return;
+      return true;
     } catch (err) {
       if (attempt === 3) {
         console.error(`[mail] не удалось отправить письмо на ${message.to}:`, err);
-        return;
+        return false;
       }
       await sleep(attempt * 1000);
     }
   }
+  return false;
 }
 
 /** Базовый адрес приложения для ссылок в письмах (прод — за Caddy, dev — Vite-прокси). */

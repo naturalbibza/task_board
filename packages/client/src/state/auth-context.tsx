@@ -6,6 +6,8 @@ import { ApiClientError } from '../api/http';
 type AuthValue = {
   user: UserDto | null;
   loading: boolean;
+  /** Включено ли подтверждение email на сервере (FR-52). */
+  emailVerificationRequired: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
@@ -20,12 +22,14 @@ const AuthContext = createContext<AuthValue | null>(null);
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserDto | null>(null);
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
       const res = await authApi.me();
       setUser(res.user);
+      setEmailVerificationRequired(Boolean(res.emailVerificationRequired));
     } catch {
       setUser(null);
     }
@@ -34,7 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     authApi
       .me()
-      .then((res) => setUser(res.user))
+      .then((res) => {
+        setUser(res.user);
+        setEmailVerificationRequired(Boolean(res.emailVerificationRequired));
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
@@ -42,14 +49,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value: AuthValue = {
     user,
     loading,
+    emailVerificationRequired,
     refresh,
     login: async (email, password) => {
       const res = await authApi.login({ email, password });
       setUser(res.user);
+      setEmailVerificationRequired(Boolean(res.emailVerificationRequired));
     },
     register: async (input) => {
       const res = await authApi.register(input);
       setUser(res.user);
+      setEmailVerificationRequired(Boolean(res.emailVerificationRequired));
     },
     logout: async () => {
       try {

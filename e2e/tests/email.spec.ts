@@ -1,10 +1,21 @@
 import { test, expect } from '@playwright/test';
-import { registerAndVerify, registerOnly, uniqueEmail, waitForInviteToken, waitForVerificationToken } from './helpers';
+import {
+  isEmailVerificationRequired,
+  registerAndVerify,
+  registerOnly,
+  uniqueEmail,
+  waitForInviteToken,
+  waitForVerificationToken,
+} from './helpers';
 
 /**
  * Фаза 14: подтверждение email (FR-31–32) и приглашения по email (FR-26).
  * Письма в dev/e2e — консольный транспорт: .localmail/*.eml.
+ * При скрытом подтверждении (FR-52) тесты пропускаются — в CI сервер запускается с флагом 1.
  */
+test.beforeEach(async () => {
+  test.skip(!(await isEmailVerificationRequired()), 'подтверждение email скрыто (FR-52)');
+});
 
 test('неподтверждённый email: ограничения и подтверждение по ссылке', async ({ page }) => {
   test.setTimeout(90_000);

@@ -5,6 +5,23 @@ import { expect, type Page } from '@playwright/test';
 /** Письма в dev/e2e пишутся в packages/server/.localmail (MAIL_MODE=console). */
 const MAIL_DIR = path.resolve(process.cwd(), '../packages/server/.localmail');
 
+const BASE_URL = process.env.E2E_BASE_URL ?? 'http://localhost:5174';
+
+let verificationRequired: boolean | null = null;
+
+/**
+ * Включён ли режим подтверждения email (FR-52). В скрытом режиме письма не отправляются,
+ * поэтому регистрация сразу завершает сценарий, а почтовые тесты пропускаются.
+ */
+export async function isEmailVerificationRequired(): Promise<boolean> {
+  if (verificationRequired !== null) return verificationRequired;
+  const res = await fetch(`${BASE_URL}/api/health`);
+  if (!res.ok) throw new Error(`health ${res.status}`);
+  const body = (await res.json()) as { emailVerificationRequired?: boolean };
+  verificationRequired = body.emailVerificationRequired === true;
+  return verificationRequired;
+}
+
 export const uniqueEmail = (tag: string): string =>
   `e2e-${tag}-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}@test.dev`;
 
@@ -61,9 +78,10 @@ export async function registerOnly(page: Page, email: string, name = 'E2E Тес
   await expect(page).toHaveURL(/\/boards$/);
 }
 
-/** Регистрирует и подтверждает email по ссылке из письма, возвращает на /boards. */
+/** Регистрирует и (если режим включён) подтверждает email по ссылке из письма. */
 export async function registerAndVerify(page: Page, email: string, name = 'E2E Тестер'): Promise<void> {
   await registerOnly(page, email, name);
+  if (!(await isEmailVerificationRequired())) return; // FR-52: скрытый режим
   const token = await waitForVerificationToken(email);
   await page.goto(`/verify-email?token=${token}`);
   await expect(page.getByText('Email подтверждён')).toBeVisible();

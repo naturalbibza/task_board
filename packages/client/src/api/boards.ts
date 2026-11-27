@@ -79,8 +79,8 @@ export function createInvite(
   boardId: string,
   role: 'ADMIN' | 'EDITOR' | 'VIEWER' = 'EDITOR',
   email?: string,
-): Promise<{ invite: InviteDto }> {
-  return api<{ invite: InviteDto }>(`/boards/${boardId}/invites`, {
+): Promise<{ invite: InviteDto; emailSent: boolean }> {
+  return api<{ invite: InviteDto; emailSent: boolean }>(`/boards/${boardId}/invites`, {
     method: 'POST',
     body: JSON.stringify(email ? { role, email } : { role }),
   });
